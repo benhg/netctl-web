@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useRef, useState, useEffect, type ChangeEvent } from 'react';
 import { useNetStore } from '../stores/netStore';
 
 function formatDuration(ms: number): string {
@@ -10,9 +10,10 @@ function formatDuration(ms: number): string {
 }
 
 export function Header() {
-  const { session, getElapsedTime, openSession, closeSession } = useNetStore();
+  const { session, getElapsedTime, openSession, closeSession, importFromCsv } = useNetStore();
   const [elapsed, setElapsed] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -24,6 +25,18 @@ export function Header() {
     return () => clearInterval(interval);
   }, [session?.status, getElapsedTime]);
 
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const csvText = await file.text();
+    importFromCsv(csvText);
+    event.target.value = '';
+  };
+
   if (!session) {
     return (
       <header className="bg-slate-800 text-white p-4 border-b border-slate-700">
@@ -31,6 +44,21 @@ export function Header() {
           <div>
             <h1 className="text-2xl font-bold">Net Control</h1>
             <p className="text-slate-400 text-sm">Create a new session to get started</p>
+            <div className="mt-3">
+              <button
+                onClick={handleImportClick}
+                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors"
+              >
+                Import CSV
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,text/csv"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
           </div>
           <div className="text-sm font-mono text-slate-300">
             <span>{currentTime.toLocaleTimeString()} Local</span>
