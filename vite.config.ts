@@ -4,6 +4,9 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://vite.dev/config/
 export default defineConfig({
-  base: "/netctl-web/",
+  base: "./",
+  build: {
+    outDir: "docs",
+  },
   plugins: [react(), tailwindcss()],
 });
