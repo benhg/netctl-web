@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { useNetStore } from '../stores/netStore';
 
 export function NewSessionForm() {
-  const { createSession, session } = useNetStore();
+  const { createSession, importFromCsv, session } = useNetStore();
   const [name, setName] = useState('');
   const [frequency, setFrequency] = useState('');
   const [netControlOp, setNetControlOp] = useState('');
   const [netControlName, setNetControlName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -18,6 +19,18 @@ export function NewSessionForm() {
       netControlOp: netControlOp.toUpperCase().trim(),
       netControlName: netControlName.trim(),
     });
+  };
+
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const csvText = await file.text();
+    importFromCsv(csvText);
+    event.target.value = '';
   };
 
   if (session) {
@@ -83,6 +96,20 @@ export function NewSessionForm() {
           >
             Start Net
           </button>
+          <button
+            type="button"
+            onClick={handleImportClick}
+            className="w-full px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded transition-colors"
+          >
+            Import CSV
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            onChange={handleFileChange}
+            className="hidden"
+          />
         </div>
       </form>
     </div>

@@ -1,7 +1,8 @@
 import { useNetStore } from '../stores/netStore';
 
 export function CommunicationLog() {
-  const { logEntries, participants, session } = useNetStore();
+  const { logEntries, participants, session, lastAcknowledgedEntryId, setLastAcknowledgedEntry } =
+    useNetStore();
 
   const formatTime = (isoString: string): string => {
     return new Date(isoString).toLocaleTimeString('en-US', {
@@ -65,6 +66,7 @@ export function CommunicationLog() {
                 <th className="pb-2 pr-2 w-28">From</th>
                 <th className="pb-2 pr-2 w-28">To</th>
                 <th className="pb-2">Message</th>
+                <th className="pb-2 w-20">Ack</th>
               </tr>
             </thead>
             <tbody>
@@ -75,6 +77,19 @@ export function CommunicationLog() {
                   <td className="py-2 pr-2">{renderCallsign(entry.fromCallsign)}</td>
                   <td className="py-2 pr-2">{renderCallsign(entry.toCallsign)}</td>
                   <td className="py-2 text-white">{entry.message || '-'}</td>
+                  <td className="py-2">
+                    {lastAcknowledgedEntryId === entry.id ? (
+                      <span className="text-xs font-semibold text-emerald-300">NC ACK</span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setLastAcknowledgedEntry(entry.id)}
+                        className="text-xs text-slate-300 hover:text-white"
+                      >
+                        Mark
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
