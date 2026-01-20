@@ -136,21 +136,34 @@ export async function generateICS309PDF(
 
   y -= 10;
 
+  const rowHeight = 15;
+  const footerSpace = 80;
+  const headerHeight = 35;
+
+  if (y - headerHeight - rowHeight < footerSpace) {
+    page = createPage();
+    y = height - margin;
+  }
+
   y = drawLogTableHeader(page, y, false);
+
+  const startLogPage = () => {
+    page = createPage();
+    y = height - margin;
+    y = drawLogTableHeader(page, y, true);
+  };
 
   // Table rows
   for (const entry of logEntries) {
-    if (y < 80) {
-      page = createPage();
-      y = height - margin;
-      y = drawLogTableHeader(page, y, true);
+    if (y - rowHeight < footerSpace) {
+      startLogPage();
     }
 
     page.drawRectangle({
       x: margin,
-      y: y - 15,
+      y: y - rowHeight,
       width: width - 2 * margin,
-      height: 15,
+      height: rowHeight,
       borderColor: rgb(0.7, 0.7, 0.7),
       borderWidth: 0.5,
     });
@@ -169,7 +182,7 @@ export async function generateICS309PDF(
     page.drawText(entry.toCallsign, { x: colX[3] + 5, y: y - 12, size: 8, font: helvetica });
     page.drawText(message || '-', { x: colX[4] + 5, y: y - 12, size: 8, font: helvetica });
 
-    y -= 15;
+    y -= rowHeight;
   }
 
   // Footer (page numbers on all pages, prepared-by on last page)
