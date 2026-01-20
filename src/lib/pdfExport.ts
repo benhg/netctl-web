@@ -139,6 +139,8 @@ export async function generateICS309PDF(
   const rowHeight = 15;
   const footerSpace = 80;
   const headerHeight = 35;
+  const getRowsForPage = (startY: number) =>
+    Math.max(1, Math.floor((startY - footerSpace) / rowHeight));
 
   if (y - headerHeight - rowHeight < footerSpace) {
     page = createPage();
@@ -147,15 +149,18 @@ export async function generateICS309PDF(
 
   y = drawLogTableHeader(page, y, false);
 
+  let rowsRemaining = getRowsForPage(y);
+
   const startLogPage = () => {
     page = createPage();
     y = height - margin;
     y = drawLogTableHeader(page, y, true);
+    rowsRemaining = getRowsForPage(y);
   };
 
   // Table rows
   for (const entry of logEntries) {
-    if (y - rowHeight < footerSpace) {
+    if (rowsRemaining <= 0) {
       startLogPage();
     }
 
@@ -183,6 +188,7 @@ export async function generateICS309PDF(
     page.drawText(message || '-', { x: colX[4] + 5, y: y - 12, size: 8, font: helvetica });
 
     y -= rowHeight;
+    rowsRemaining -= 1;
   }
 
   // Footer (page numbers on all pages, prepared-by on last page)
