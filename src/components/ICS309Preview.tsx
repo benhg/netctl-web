@@ -124,7 +124,9 @@ export function ICS309Preview() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <div className="text-gray-600">5. Prepared by (Name, Position)</div>
-              <div className="border-b border-gray-400 h-6 mt-1"></div>
+              <div className="border-b border-gray-400 h-6 mt-1 flex items-end">
+                <span className="text-black">{session.preparedBy || ''}</span>
+              </div>
             </div>
             <div>
               <div className="text-gray-600">Page ___ of ___</div>

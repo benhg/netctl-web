@@ -164,6 +164,9 @@ export async function generateICS309PDF(
   // Footer
   y = 60;
   page.drawText('5. Prepared by:', { x: margin, y: y, size: 9, font: helvetica });
+  if (session.preparedBy) {
+    page.drawText(session.preparedBy, { x: margin + 85, y: y - 12, size: 9, font: helveticaBold });
+  }
   page.drawLine({
     start: { x: margin + 80, y: y - 2 },
     end: { x: margin + 200, y: y - 2 },

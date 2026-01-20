@@ -4,6 +4,7 @@ export interface NetSession {
   frequency: string;
   netControlOp: string;
   netControlName: string;
+  preparedBy: string;
   dateTime: string;
   endTime: string | null;
   status: 'pending' | 'active' | 'closed';

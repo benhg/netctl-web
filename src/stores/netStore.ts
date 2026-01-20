@@ -73,6 +73,13 @@ const loadActiveSessionData = (): SessionData | null => {
   }
 };
 
+type StoredSession = NetSession & { preparedBy?: string };
+
+const normalizeSession = (session: StoredSession): NetSession => ({
+  ...session,
+  preparedBy: session.preparedBy ?? '',
+});
+
 const saveSessionData = (data: SessionData) => {
   const sessions = readSessions();
   sessions[data.session.id] = data;
@@ -140,7 +147,10 @@ interface NetStore {
   reset: () => void;
 }
 
-const initialSessionData = loadActiveSessionData();
+const initialSessionDataRaw = loadActiveSessionData();
+const initialSessionData = initialSessionDataRaw
+  ? { ...initialSessionDataRaw, session: normalizeSession(initialSessionDataRaw.session as StoredSession) }
+  : null;
 
 export const useNetStore = create<NetStore>((set, get) => ({
   session: initialSessionData?.session ?? null,
@@ -222,15 +232,16 @@ export const useNetStore = create<NetStore>((set, get) => ({
       set({ error: 'Session not found', isLoading: false });
       return;
     }
+    const normalizedSession = normalizeSession(data.session as StoredSession);
     set({
-      session: data.session,
+      session: normalizedSession,
       participants: data.participants,
       logEntries: data.logEntries,
       lastAcknowledgedEntryId: data.lastAcknowledgedEntryId ?? null,
-      startTime: data.session.status === 'active' ? new Date(data.session.dateTime).getTime() : null,
+      startTime: normalizedSession.status === 'active' ? new Date(normalizedSession.dateTime).getTime() : null,
       isLoading: false,
     });
-    setActiveSessionId(data.session.id);
+    setActiveSessionId(normalizedSession.id);
   },
 
   addParticipant: (participantData) => {
@@ -411,6 +422,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
     lines.push(`Net Name,${session.name}`);
     lines.push(`Frequency,${session.frequency}`);
     lines.push(`Net Control,${session.netControlOp} - ${session.netControlName}`);
+    lines.push(`Prepared By,${session.preparedBy}`);
     lines.push(`Date/Time,${session.dateTime}`);
     lines.push('');
     lines.push('Participants');
@@ -473,6 +485,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
       const [netControlOpRaw, ...netControlNameParts] = netControlLine.split(' - ');
       const netControlOp = netControlOpRaw?.trim().toUpperCase() || 'NET';
       const netControlName = netControlNameParts.join(' - ').trim();
+      const preparedBy = getValueAfterLabel('Prepared By');
       const dateTime = getValueAfterLabel('Date/Time') || new Date().toISOString();
 
       const participants: Participant[] = [];
@@ -547,6 +560,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
         frequency,
         netControlOp,
         netControlName,
+        preparedBy,
         dateTime,
         endTime: null,
         status: 'active',

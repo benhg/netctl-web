@@ -7,6 +7,7 @@ export function NewSessionForm() {
   const [frequency, setFrequency] = useState('');
   const [netControlOp, setNetControlOp] = useState('');
   const [netControlName, setNetControlName] = useState('');
+  const [preparedBy, setPreparedBy] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -18,6 +19,7 @@ export function NewSessionForm() {
       frequency: frequency.trim(),
       netControlOp: netControlOp.toUpperCase().trim(),
       netControlName: netControlName.trim(),
+      preparedBy: preparedBy.trim(),
     });
   };
 
@@ -85,6 +87,17 @@ export function NewSessionForm() {
               value={netControlName}
               onChange={(e) => setNetControlName(e.target.value)}
               placeholder="John Smith"
+              className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-slate-300 mb-1">Prepared By</label>
+            <input
+              type="text"
+              value={preparedBy}
+              onChange={(e) => setPreparedBy(e.target.value)}
+              placeholder="Name, Position"
               className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
             />
           </div>
