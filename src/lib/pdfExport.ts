@@ -21,6 +21,7 @@ export async function generateICS309PDF(
   const { width, height } = page.getSize();
   const margin = 50;
   let y = height - margin;
+  const footerSpace = 80;
   const colWidths = [30, 50, 70, 70, 200];
   const colX = [margin];
   for (let i = 1; i < colWidths.length; i++) {
@@ -111,13 +112,27 @@ export async function generateICS309PDF(
   y -= 60;
 
   // Participants section
-  page.drawText(`Checked-In Stations (${participants.length}):`, {
-    x: margin,
-    y: y,
-    size: 10,
-    font: helveticaBold,
-  });
-  y -= 15;
+  const startNewPage = () => {
+    page = createPage();
+    y = height - margin;
+  };
+
+  const ensureSpace = (requiredHeight: number) => {
+    if (y - requiredHeight < footerSpace) {
+      startNewPage();
+    }
+  };
+
+  const drawParticipantsHeader = (isContinuation: boolean) => {
+    const label = isContinuation
+      ? `Checked-In Stations (${participants.length}) (cont.):`
+      : `Checked-In Stations (${participants.length}):`;
+    ensureSpace(15);
+    page.drawText(label, { x: margin, y: y, size: 10, font: helveticaBold });
+    y -= 15;
+  };
+
+  drawParticipantsHeader(false);
 
   const participantsList = participants.map(p => {
     const tactical = p.tacticalCall ? `${p.tacticalCall} / ` : '';
@@ -125,30 +140,75 @@ export async function generateICS309PDF(
   }).join(', ');
 
   // Simple word wrap for participants
+  const participantLineHeight = 12;
   let remaining = participantsList;
-  while (remaining.length > 0 && y > 250) {
+  while (remaining.length > 0) {
+    if (y - participantLineHeight < footerSpace) {
+      startNewPage();
+      drawParticipantsHeader(true);
+    }
     const line = remaining.substring(0, 80);
     const breakPoint = line.length < 80 ? line.length : line.lastIndexOf(', ') + 2 || 80;
     page.drawText(remaining.substring(0, breakPoint), { x: margin, y: y, size: 8, font: helvetica });
     remaining = remaining.substring(breakPoint);
-    y -= 12;
+    y -= participantLineHeight;
   }
 
   y -= 10;
 
-  const rowHeight = 15;
-  const footerSpace = 80;
+  const minRowHeight = 15;
+  const lineHeight = 10;
   const headerHeight = 35;
 
-  if (y - headerHeight - rowHeight < footerSpace) {
+  if (y - headerHeight - minRowHeight < footerSpace) {
     page = createPage();
     y = height - margin;
   }
 
   y = drawLogTableHeader(page, y, false);
+  const wrapText = (text: string, maxWidth: number, font: typeof helvetica, size: number) => {
+    if (!text) return ['-'];
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines: string[] = [];
+    let current = '';
+
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word;
+      if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+        current = candidate;
+      } else if (current) {
+        lines.push(current);
+        current = word;
+      } else {
+        let slice = '';
+        for (const char of word) {
+          const next = slice + char;
+          if (font.widthOfTextAtSize(next, size) > maxWidth && slice) {
+            lines.push(slice);
+            slice = char;
+          } else {
+            slice = next;
+          }
+        }
+        current = slice;
+      }
+    }
+    if (current) lines.push(current);
+    return lines.length ? lines : ['-'];
+  };
+
   let rowY = y;
 
   for (const entry of logEntries) {
+    const time = new Date(entry.time).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    const messageLines = wrapText(entry.message || '-', colWidths[4] - 10, helvetica, 8);
+    const rowHeight = Math.max(minRowHeight, messageLines.length * lineHeight + 6);
+
     if (rowY - rowHeight < footerSpace) {
       page = createPage();
       rowY = drawLogTableHeader(page, height - margin, true);
@@ -163,19 +223,14 @@ export async function generateICS309PDF(
       borderWidth: 0.5,
     });
 
-    const time = new Date(entry.time).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
+    const textY = rowY - 12;
+    page.drawText(String(entry.entryNumber), { x: colX[0] + 5, y: textY, size: 8, font: helvetica });
+    page.drawText(time, { x: colX[1] + 5, y: textY, size: 8, font: helvetica });
+    page.drawText(entry.fromCallsign, { x: colX[2] + 5, y: textY, size: 8, font: helvetica });
+    page.drawText(entry.toCallsign, { x: colX[3] + 5, y: textY, size: 8, font: helvetica });
+    messageLines.forEach((line, index) => {
+      page.drawText(line, { x: colX[4] + 5, y: textY - index * lineHeight, size: 8, font: helvetica });
     });
-
-    const message = entry.message.length > 40 ? entry.message.substring(0, 37) + '...' : entry.message;
-
-    page.drawText(String(entry.entryNumber), { x: colX[0] + 5, y: rowY - 12, size: 8, font: helvetica });
-    page.drawText(time, { x: colX[1] + 5, y: rowY - 12, size: 8, font: helvetica });
-    page.drawText(entry.fromCallsign, { x: colX[2] + 5, y: rowY - 12, size: 8, font: helvetica });
-    page.drawText(entry.toCallsign, { x: colX[3] + 5, y: rowY - 12, size: 8, font: helvetica });
-    page.drawText(message || '-', { x: colX[4] + 5, y: rowY - 12, size: 8, font: helvetica });
 
     rowY -= rowHeight;
   }
