@@ -148,47 +148,49 @@ export async function generateICS309PDF(
   }
 
   y = drawLogTableHeader(page, y, false);
+  let logStartY = y;
+  let logIndex = 0;
+  let rowsPerPage = getRowsForPage(logStartY);
 
-  let rowsRemaining = getRowsForPage(y);
+  const renderLogRows = (entries: LogEntry[], startY: number) => {
+    let rowY = startY;
+    for (const entry of entries) {
+      page.drawRectangle({
+        x: margin,
+        y: rowY - rowHeight,
+        width: width - 2 * margin,
+        height: rowHeight,
+        borderColor: rgb(0.7, 0.7, 0.7),
+        borderWidth: 0.5,
+      });
 
-  const startLogPage = () => {
-    page = createPage();
-    y = height - margin;
-    y = drawLogTableHeader(page, y, true);
-    rowsRemaining = getRowsForPage(y);
+      const time = new Date(entry.time).toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      });
+
+      const message = entry.message.length > 40 ? entry.message.substring(0, 37) + '...' : entry.message;
+
+      page.drawText(String(entry.entryNumber), { x: colX[0] + 5, y: rowY - 12, size: 8, font: helvetica });
+      page.drawText(time, { x: colX[1] + 5, y: rowY - 12, size: 8, font: helvetica });
+      page.drawText(entry.fromCallsign, { x: colX[2] + 5, y: rowY - 12, size: 8, font: helvetica });
+      page.drawText(entry.toCallsign, { x: colX[3] + 5, y: rowY - 12, size: 8, font: helvetica });
+      page.drawText(message || '-', { x: colX[4] + 5, y: rowY - 12, size: 8, font: helvetica });
+
+      rowY -= rowHeight;
+    }
   };
 
-  // Table rows
-  for (const entry of logEntries) {
-    if (rowsRemaining <= 0) {
-      startLogPage();
+  while (logIndex < logEntries.length) {
+    const chunk = logEntries.slice(logIndex, logIndex + rowsPerPage);
+    renderLogRows(chunk, logStartY);
+    logIndex += chunk.length;
+    if (logIndex < logEntries.length) {
+      page = createPage();
+      logStartY = drawLogTableHeader(page, height - margin, true);
+      rowsPerPage = getRowsForPage(logStartY);
     }
-
-    page.drawRectangle({
-      x: margin,
-      y: y - rowHeight,
-      width: width - 2 * margin,
-      height: rowHeight,
-      borderColor: rgb(0.7, 0.7, 0.7),
-      borderWidth: 0.5,
-    });
-
-    const time = new Date(entry.time).toLocaleTimeString('en-US', {
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    });
-
-    const message = entry.message.length > 40 ? entry.message.substring(0, 37) + '...' : entry.message;
-
-    page.drawText(String(entry.entryNumber), { x: colX[0] + 5, y: y - 12, size: 8, font: helvetica });
-    page.drawText(time, { x: colX[1] + 5, y: y - 12, size: 8, font: helvetica });
-    page.drawText(entry.fromCallsign, { x: colX[2] + 5, y: y - 12, size: 8, font: helvetica });
-    page.drawText(entry.toCallsign, { x: colX[3] + 5, y: y - 12, size: 8, font: helvetica });
-    page.drawText(message || '-', { x: colX[4] + 5, y: y - 12, size: 8, font: helvetica });
-
-    y -= rowHeight;
-    rowsRemaining -= 1;
   }
 
   // Footer (page numbers on all pages, prepared-by on last page)
