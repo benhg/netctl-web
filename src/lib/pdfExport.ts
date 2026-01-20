@@ -139,8 +139,6 @@ export async function generateICS309PDF(
   const rowHeight = 15;
   const footerSpace = 80;
   const headerHeight = 35;
-  const getRowsForPage = (startY: number) =>
-    Math.max(1, Math.floor((startY - footerSpace) / rowHeight));
 
   if (y - headerHeight - rowHeight < footerSpace) {
     page = createPage();
@@ -148,49 +146,38 @@ export async function generateICS309PDF(
   }
 
   y = drawLogTableHeader(page, y, false);
-  let logStartY = y;
-  let logIndex = 0;
-  let rowsPerPage = getRowsForPage(logStartY);
+  let rowY = y;
 
-  const renderLogRows = (entries: LogEntry[], startY: number) => {
-    let rowY = startY;
-    for (const entry of entries) {
-      page.drawRectangle({
-        x: margin,
-        y: rowY - rowHeight,
-        width: width - 2 * margin,
-        height: rowHeight,
-        borderColor: rgb(0.7, 0.7, 0.7),
-        borderWidth: 0.5,
-      });
-
-      const time = new Date(entry.time).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: false,
-      });
-
-      const message = entry.message.length > 40 ? entry.message.substring(0, 37) + '...' : entry.message;
-
-      page.drawText(String(entry.entryNumber), { x: colX[0] + 5, y: rowY - 12, size: 8, font: helvetica });
-      page.drawText(time, { x: colX[1] + 5, y: rowY - 12, size: 8, font: helvetica });
-      page.drawText(entry.fromCallsign, { x: colX[2] + 5, y: rowY - 12, size: 8, font: helvetica });
-      page.drawText(entry.toCallsign, { x: colX[3] + 5, y: rowY - 12, size: 8, font: helvetica });
-      page.drawText(message || '-', { x: colX[4] + 5, y: rowY - 12, size: 8, font: helvetica });
-
-      rowY -= rowHeight;
-    }
-  };
-
-  while (logIndex < logEntries.length) {
-    const chunk = logEntries.slice(logIndex, logIndex + rowsPerPage);
-    renderLogRows(chunk, logStartY);
-    logIndex += chunk.length;
-    if (logIndex < logEntries.length) {
+  for (const entry of logEntries) {
+    if (rowY - rowHeight < footerSpace) {
       page = createPage();
-      logStartY = drawLogTableHeader(page, height - margin, true);
-      rowsPerPage = getRowsForPage(logStartY);
+      rowY = drawLogTableHeader(page, height - margin, true);
     }
+
+    page.drawRectangle({
+      x: margin,
+      y: rowY - rowHeight,
+      width: width - 2 * margin,
+      height: rowHeight,
+      borderColor: rgb(0.7, 0.7, 0.7),
+      borderWidth: 0.5,
+    });
+
+    const time = new Date(entry.time).toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+
+    const message = entry.message.length > 40 ? entry.message.substring(0, 37) + '...' : entry.message;
+
+    page.drawText(String(entry.entryNumber), { x: colX[0] + 5, y: rowY - 12, size: 8, font: helvetica });
+    page.drawText(time, { x: colX[1] + 5, y: rowY - 12, size: 8, font: helvetica });
+    page.drawText(entry.fromCallsign, { x: colX[2] + 5, y: rowY - 12, size: 8, font: helvetica });
+    page.drawText(entry.toCallsign, { x: colX[3] + 5, y: rowY - 12, size: 8, font: helvetica });
+    page.drawText(message || '-', { x: colX[4] + 5, y: rowY - 12, size: 8, font: helvetica });
+
+    rowY -= rowHeight;
   }
 
   // Footer (page numbers on all pages, prepared-by on last page)
