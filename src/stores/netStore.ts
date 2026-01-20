@@ -121,7 +121,11 @@ interface NetStore {
   loadSession: (id: string) => Promise<void>;
 
   // Participant actions
-  addParticipant: (participant: Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'>) => void;
+  addParticipant: (
+    participant: Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'> & {
+      initialTraffic?: string;
+    }
+  ) => void;
   updateParticipant: (
     id: string,
     updates: Partial<Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'>>
@@ -248,7 +252,10 @@ export const useNetStore = create<NetStore>((set, get) => ({
     const { participants, session } = get();
     const participant: Participant = {
       id: uuidv4(),
-      ...participantData,
+      callsign: participantData.callsign,
+      tacticalCall: participantData.tacticalCall,
+      name: participantData.name,
+      location: participantData.location,
       checkInTime: new Date().toISOString(),
       checkInNumber: participants.length + 1,
     };
@@ -265,10 +272,11 @@ export const useNetStore = create<NetStore>((set, get) => ({
     }
 
     if (session?.status === 'active') {
+      const initialTraffic = participantData.initialTraffic?.trim();
       get().addLogEntry({
         fromCallsign: participant.callsign,
         toCallsign: 'NC',
-        message: 'check in',
+        message: initialTraffic ? `check in - ${initialTraffic}` : 'check in',
       });
     }
   },

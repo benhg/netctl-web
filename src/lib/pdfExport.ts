@@ -1,4 +1,4 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { PDFDocument, PDFPage, StandardFonts, rgb } from 'pdf-lib';
 import type { NetSession, Participant, LogEntry } from '../types';
 
 export async function generateICS309PDF(
@@ -7,7 +7,13 @@ export async function generateICS309PDF(
   logEntries: LogEntry[]
 ): Promise<Uint8Array> {
   const pdfDoc = await PDFDocument.create();
-  const page = pdfDoc.addPage([612, 792]); // Letter size
+  const pages: PDFPage[] = [];
+  const createPage = () => {
+    const page = pdfDoc.addPage([612, 792]); // Letter size
+    pages.push(page);
+    return page;
+  };
+  let page = createPage();
 
   const helvetica = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const helveticaBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -15,6 +21,35 @@ export async function generateICS309PDF(
   const { width, height } = page.getSize();
   const margin = 50;
   let y = height - margin;
+  const colWidths = [30, 50, 70, 70, 200];
+  const colX = [margin];
+  for (let i = 1; i < colWidths.length; i++) {
+    colX.push(colX[i - 1] + colWidths[i - 1]);
+  }
+
+  const drawLogTableHeader = (currentPage: typeof page, startY: number, isContinuation: boolean) => {
+    const title = isContinuation ? '4. Log (Communications) (cont.)' : '4. Log (Communications)';
+    currentPage.drawText(title, { x: margin, y: startY, size: 10, font: helveticaBold });
+    let nextY = startY - 20;
+
+    currentPage.drawRectangle({
+      x: margin,
+      y: nextY - 15,
+      width: width - 2 * margin,
+      height: 15,
+      color: rgb(0.9, 0.9, 0.9),
+      borderColor: rgb(0, 0, 0),
+      borderWidth: 0.5,
+    });
+
+    currentPage.drawText('#', { x: colX[0] + 5, y: nextY - 12, size: 9, font: helveticaBold });
+    currentPage.drawText('Time', { x: colX[1] + 5, y: nextY - 12, size: 9, font: helveticaBold });
+    currentPage.drawText('From', { x: colX[2] + 5, y: nextY - 12, size: 9, font: helveticaBold });
+    currentPage.drawText('To', { x: colX[3] + 5, y: nextY - 12, size: 9, font: helveticaBold });
+    currentPage.drawText('Subject/Remarks', { x: colX[4] + 5, y: nextY - 12, size: 9, font: helveticaBold });
+
+    return nextY - 15;
+  };
 
   // Title
   page.drawText('ICS 309 - COMMUNICATIONS LOG', {
@@ -101,39 +136,15 @@ export async function generateICS309PDF(
 
   y -= 10;
 
-  // 4. Log Table Header
-  page.drawText('4. Log (Communications)', { x: margin, y: y, size: 10, font: helveticaBold });
-  y -= 20;
-
-  // Table header
-  const colWidths = [30, 50, 70, 70, 200];
-  const colX = [margin];
-  for (let i = 1; i < colWidths.length; i++) {
-    colX.push(colX[i - 1] + colWidths[i - 1]);
-  }
-
-  // Draw header row
-  page.drawRectangle({
-    x: margin,
-    y: y - 15,
-    width: width - 2 * margin,
-    height: 15,
-    color: rgb(0.9, 0.9, 0.9),
-    borderColor: rgb(0, 0, 0),
-    borderWidth: 0.5,
-  });
-
-  page.drawText('#', { x: colX[0] + 5, y: y - 12, size: 9, font: helveticaBold });
-  page.drawText('Time', { x: colX[1] + 5, y: y - 12, size: 9, font: helveticaBold });
-  page.drawText('From', { x: colX[2] + 5, y: y - 12, size: 9, font: helveticaBold });
-  page.drawText('To', { x: colX[3] + 5, y: y - 12, size: 9, font: helveticaBold });
-  page.drawText('Subject/Remarks', { x: colX[4] + 5, y: y - 12, size: 9, font: helveticaBold });
-
-  y -= 15;
+  y = drawLogTableHeader(page, y, false);
 
   // Table rows
   for (const entry of logEntries) {
-    if (y < 80) break;
+    if (y < 80) {
+      page = createPage();
+      y = height - margin;
+      y = drawLogTableHeader(page, y, true);
+    }
 
     page.drawRectangle({
       x: margin,
@@ -161,20 +172,30 @@ export async function generateICS309PDF(
     y -= 15;
   }
 
-  // Footer
-  y = 60;
-  page.drawText('5. Prepared by:', { x: margin, y: y, size: 9, font: helvetica });
-  if (session.preparedBy) {
-    page.drawText(session.preparedBy, { x: margin + 85, y: y - 12, size: 9, font: helveticaBold });
-  }
-  page.drawLine({
-    start: { x: margin + 80, y: y - 2 },
-    end: { x: margin + 200, y: y - 2 },
-    thickness: 0.5,
-    color: rgb(0, 0, 0),
-  });
+  // Footer (page numbers on all pages, prepared-by on last page)
+  pages.forEach((currentPage, index) => {
+    const footerY = 60;
+    const pageNumberText = `Page ${index + 1} of ${pages.length}`;
+    currentPage.drawText(pageNumberText, { x: width - margin - 60, y: footerY, size: 9, font: helvetica });
 
-  page.drawText('Page 1 of 1', { x: width - margin - 60, y: y, size: 9, font: helvetica });
+    if (index === pages.length - 1) {
+      currentPage.drawText('5. Prepared by:', { x: margin, y: footerY, size: 9, font: helvetica });
+      if (session.preparedBy) {
+        currentPage.drawText(session.preparedBy, {
+          x: margin + 85,
+          y: footerY - 12,
+          size: 9,
+          font: helveticaBold,
+        });
+      }
+      currentPage.drawLine({
+        start: { x: margin + 80, y: footerY - 2 },
+        end: { x: margin + 200, y: footerY - 2 },
+        thickness: 0.5,
+        color: rgb(0, 0, 0),
+      });
+    }
+  });
 
   return await pdfDoc.save();
 }

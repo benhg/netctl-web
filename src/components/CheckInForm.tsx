@@ -7,6 +7,7 @@ export function CheckInForm() {
   const [tacticalCall, setTacticalCall] = useState('');
   const [name, setName] = useState('');
   const [location, setLocation] = useState('');
+  const [initialTraffic, setInitialTraffic] = useState('');
   const [isLookingUp, setIsLookingUp] = useState(false);
   const callsignRef = useRef<HTMLInputElement>(null);
 
@@ -31,12 +32,14 @@ export function CheckInForm() {
       tacticalCall: tacticalCall.trim(),
       name: name.trim(),
       location: location.trim(),
+      initialTraffic: initialTraffic.trim(),
     });
 
     setCallsign('');
     setTacticalCall('');
     setName('');
     setLocation('');
+    setInitialTraffic('');
     callsignRef.current?.focus();
   };
 
@@ -100,6 +103,16 @@ export function CheckInForm() {
             onChange={(e) => setLocation(e.target.value)}
             placeholder="Boston, MA"
             className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+          />
+        </div>
+        <div className="col-span-2">
+          <label className="block text-xs text-slate-400 mb-1">Initial Traffic</label>
+          <textarea
+            value={initialTraffic}
+            onChange={(e) => setInitialTraffic(e.target.value)}
+            placeholder="Brief traffic or remarks for the check-in log..."
+            rows={2}
+            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
           />
         </div>
       </div>
