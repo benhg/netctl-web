@@ -52,7 +52,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
 
   if (participants.length === 0) {
     return (
-      <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+      <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1">
         <h2 className="text-lg font-semibold text-white mb-3">Checked In Stations</h2>
         <p className="text-slate-400 text-sm">No stations checked in yet</p>
       </div>
@@ -60,12 +60,12 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
   }
 
   return (
-    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1 min-h-0 flex flex-col">
       <div className="flex justify-between items-center mb-3">
         <h2 className="text-lg font-semibold text-white">Checked In Stations</h2>
         <span className="text-sm text-slate-400">{participants.length} stations</span>
       </div>
-      <div className="space-y-2 max-h-64 overflow-y-auto">
+      <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
         {participants.map((p) => {
           const lastTx = getLastTransmission(p.callsign);
           return (

@@ -41,7 +41,7 @@ function App() {
 
   return (
     <div
-      className="min-h-screen bg-slate-900 text-white"
+      className="min-h-screen bg-slate-900 text-white flex flex-col"
       style={
         supportsZoom
           ? { zoom }
@@ -58,7 +58,7 @@ function App() {
       {!session ? (
         <NewSessionForm />
       ) : (
-        <div className="p-4">
+        <div className="p-4 flex-1 flex flex-col min-h-0">
           {/* Top toolbar */}
           <div className="flex justify-between items-center mb-4">
             <div className="flex gap-2">
@@ -87,15 +87,15 @@ function App() {
           {showPreview ? (
             <ICS309Preview />
           ) : (
-            <div className="grid grid-cols-12 gap-4">
+            <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
               {/* Left column - Forms */}
-              <div className="col-span-4 space-y-4">
+              <div className="col-span-4 flex flex-col gap-4 min-h-0">
                 <CheckInForm />
                 <ParticipantList onSelectParticipant={setSelectedParticipant} />
               </div>
 
               {/* Right column - Log */}
-              <div className="col-span-8 flex flex-col gap-4">
+              <div className="col-span-8 flex flex-col gap-4 min-h-0">
                 <LogEntryForm
                   selectedParticipant={selectedParticipant}
                   onClear={() => setSelectedParticipant(null)}
