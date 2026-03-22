@@ -41,7 +41,7 @@ function App() {
 
   return (
     <div
-      className="min-h-screen bg-slate-900 text-white flex flex-col"
+      className="h-screen bg-slate-900 text-white flex flex-col overflow-hidden"
       style={
         supportsZoom
           ? { zoom }
@@ -58,9 +58,9 @@ function App() {
       {!session ? (
         <NewSessionForm />
       ) : (
-        <div className="p-4 flex-1 flex flex-col min-h-0">
+        <div className="p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
           {/* Top toolbar */}
-          <div className="flex justify-between items-center mb-4">
+          <div className="flex justify-between items-center mb-4 shrink-0">
             <div className="flex gap-2">
               <button
                 onClick={() => setShowPreview(!showPreview)}
@@ -87,7 +87,7 @@ function App() {
           {showPreview ? (
             <ICS309Preview />
           ) : (
-            <div className="grid grid-cols-12 gap-4 flex-1 min-h-0">
+            <div className="grid grid-cols-12 gap-4 flex-1 min-h-0 overflow-hidden">
               {/* Left column - Forms */}
               <div className="col-span-4 flex flex-col gap-4 min-h-0">
                 <CheckInForm />
