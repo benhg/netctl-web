@@ -2,7 +2,7 @@ import { useRef, useState, type ChangeEvent } from 'react';
 import { useNetStore } from '../stores/netStore';
 
 export function NewSessionForm() {
-  const { createSession, importFromCsv, session } = useNetStore();
+  const { createSession, importFromCsv, session, error } = useNetStore();
   const [name, setName] = useState('');
   const [frequency, setFrequency] = useState('');
   const [netControlOp, setNetControlOp] = useState('');
@@ -123,6 +123,11 @@ export function NewSessionForm() {
             onChange={handleFileChange}
             className="hidden"
           />
+          {error && (
+            <div className="rounded border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+              {error}
+            </div>
+          )}
         </div>
       </form>
     </div>

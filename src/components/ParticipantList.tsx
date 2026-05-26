@@ -13,6 +13,8 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
   const [editTacticalCall, setEditTacticalCall] = useState('');
   const [editName, setEditName] = useState('');
   const [editLocation, setEditLocation] = useState('');
+  const [editHasTraffic, setEditHasTraffic] = useState(false);
+  const [editTrafficNote, setEditTrafficNote] = useState('');
 
   const startEditing = (participant: Participant) => {
     setEditingId(participant.id);
@@ -20,6 +22,8 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
     setEditTacticalCall(participant.tacticalCall);
     setEditName(participant.name);
     setEditLocation(participant.location);
+    setEditHasTraffic(participant.hasTraffic ?? false);
+    setEditTrafficNote(participant.trafficNote ?? '');
   };
 
   const cancelEditing = () => {
@@ -28,6 +32,8 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
     setEditTacticalCall('');
     setEditName('');
     setEditLocation('');
+    setEditHasTraffic(false);
+    setEditTrafficNote('');
   };
 
   const saveEditing = (id: string) => {
@@ -37,6 +43,8 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
       tacticalCall: editTacticalCall.trim(),
       name: editName.trim(),
       location: editLocation.trim(),
+      hasTraffic: editHasTraffic,
+      trafficNote: editTrafficNote.trim(),
     });
     cancelEditing();
   };
@@ -59,19 +67,56 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
     );
   }
 
+  const trafficQueue = participants
+    .filter((participant) => participant.hasTraffic)
+    .sort((a, b) => a.checkInNumber - b.checkInNumber);
+  const nextTraffic = trafficQueue[0] ?? null;
+
   return (
     <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1 min-h-0 flex flex-col">
       <div className="flex justify-between items-center mb-3">
         <h2 className="text-lg font-semibold text-white">Checked In Stations</h2>
         <span className="text-sm text-slate-400">{participants.length} stations</span>
       </div>
+      <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-wide text-amber-300">Traffic Queue</div>
+            <div className="text-sm text-white">
+              {nextTraffic
+                ? `Next traffic: ${nextTraffic.tacticalCall || nextTraffic.callsign}`
+                : 'No pending traffic'}
+            </div>
+          </div>
+          <div className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200">
+            {trafficQueue.length} waiting
+          </div>
+        </div>
+        {trafficQueue.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {trafficQueue.map((participant, index) => (
+              <span
+                key={participant.id}
+                className="rounded-full bg-slate-900/70 px-2 py-1 text-xs text-amber-100"
+              >
+                #{index + 1} {participant.tacticalCall || participant.callsign}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
       <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
         {participants.map((p) => {
           const lastTx = getLastTransmission(p.callsign);
+          const trafficIndex = trafficQueue.findIndex((participant) => participant.id === p.id);
           return (
             <div
               key={p.id}
-              className="flex items-center justify-between p-2 bg-slate-900 rounded hover:bg-slate-700 transition-colors group"
+              className={`flex items-center justify-between p-2 rounded transition-colors group ${
+                p.hasTraffic
+                  ? 'bg-amber-950/40 border border-amber-500/30 hover:bg-amber-900/40'
+                  : 'bg-slate-900 hover:bg-slate-700'
+              }`}
             >
               {editingId === p.id ? (
                 <div className="flex-1">
@@ -112,6 +157,24 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                         className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
                       />
                     </div>
+                    <div className="col-span-2">
+                      <label className="flex items-center gap-2 text-[10px] text-slate-300 mb-1">
+                        <input
+                          type="checkbox"
+                          checked={editHasTraffic}
+                          onChange={(e) => setEditHasTraffic(e.target.checked)}
+                          className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
+                        />
+                        Pending traffic
+                      </label>
+                      <input
+                        type="text"
+                        value={editTrafficNote}
+                        onChange={(e) => setEditTrafficNote(e.target.value)}
+                        placeholder="Optional traffic note"
+                        className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
                   </div>
                   <div className="flex justify-end gap-2">
                     <button
@@ -139,6 +202,28 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-slate-500 w-6">#{p.checkInNumber}</span>
+                      <label
+                        className="flex items-center gap-2 text-xs text-slate-300"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={p.hasTraffic ?? false}
+                          onChange={(e) =>
+                            updateParticipant(p.id, {
+                              hasTraffic: e.target.checked,
+                              trafficNote: e.target.checked ? p.trafficNote : '',
+                            })
+                          }
+                          disabled={session?.status !== 'active'}
+                          className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
+                        />
+                      </label>
+                      {typeof trafficIndex === 'number' && trafficIndex >= 0 && (
+                        <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
+                          Traffic #{trafficIndex + 1}
+                        </span>
+                      )}
                       {p.tacticalCall && (
                         <span className="font-semibold text-yellow-400">{p.tacticalCall}</span>
                       )}
@@ -148,6 +233,9 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                     </div>
                     {lastTx && (
                       <div className="text-xs text-slate-500 ml-9">Last TX: {lastTx}</div>
+                    )}
+                    {p.hasTraffic && p.trafficNote && (
+                      <div className="text-xs text-amber-200 ml-9">Traffic: {p.trafficNote}</div>
                     )}
                   </button>
                   {session?.status === 'active' && (

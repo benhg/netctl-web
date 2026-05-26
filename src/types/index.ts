@@ -18,6 +18,8 @@ export interface Participant {
   location: string;
   checkInTime: string;
   checkInNumber: number;
+  hasTraffic?: boolean;
+  trafficNote?: string;
 }
 
 export interface LogEntry {

@@ -20,3 +20,14 @@ body {
     Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
   background: #0f172a;
 }
+
+.log-heading-face {
+  font-family: "Avenir Next", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.02em;
+}
+
+.log-data-face {
+  font-family: "SFMono-Regular", "Cascadia Mono", "Roboto Mono", Consolas,
+    "Liberation Mono", Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}

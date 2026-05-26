@@ -80,9 +80,21 @@ const normalizeSession = (session: StoredSession): NetSession => ({
   preparedBy: session.preparedBy ?? '',
 });
 
+const normalizeParticipant = (participant: Participant): Participant => ({
+  ...participant,
+  tacticalCall: participant.tacticalCall ?? '',
+  name: participant.name ?? '',
+  location: participant.location ?? '',
+  hasTraffic: participant.hasTraffic ?? false,
+  trafficNote: participant.trafficNote ?? '',
+});
+
 const saveSessionData = (data: SessionData) => {
   const sessions = readSessions();
-  sessions[data.session.id] = data;
+  sessions[data.session.id] = {
+    ...data,
+    participants: data.participants.map(normalizeParticipant),
+  };
   writeSessions(sessions);
   setActiveSessionId(data.session.id);
 };
@@ -124,8 +136,9 @@ interface NetStore {
   addParticipant: (
     participant: Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'> & {
       initialTraffic?: string;
+      hasTraffic?: boolean;
     }
-  ) => void;
+  ) => string;
   updateParticipant: (
     id: string,
     updates: Partial<Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'>>
@@ -153,7 +166,11 @@ interface NetStore {
 
 const initialSessionDataRaw = loadActiveSessionData();
 const initialSessionData = initialSessionDataRaw
-  ? { ...initialSessionDataRaw, session: normalizeSession(initialSessionDataRaw.session as StoredSession) }
+  ? {
+      ...initialSessionDataRaw,
+      session: normalizeSession(initialSessionDataRaw.session as StoredSession),
+      participants: initialSessionDataRaw.participants.map(normalizeParticipant),
+    }
   : null;
 
 export const useNetStore = create<NetStore>((set, get) => ({
@@ -239,7 +256,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
     const normalizedSession = normalizeSession(data.session as StoredSession);
     set({
       session: normalizedSession,
-      participants: data.participants,
+      participants: data.participants.map(normalizeParticipant),
       logEntries: data.logEntries,
       lastAcknowledgedEntryId: data.lastAcknowledgedEntryId ?? null,
       startTime: normalizedSession.status === 'active' ? new Date(normalizedSession.dateTime).getTime() : null,
@@ -258,6 +275,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
       location: participantData.location,
       checkInTime: new Date().toISOString(),
       checkInNumber: participants.length + 1,
+      hasTraffic: participantData.hasTraffic ?? false,
+      trafficNote: participantData.initialTraffic?.trim() ?? '',
     };
     const newParticipants = [...participants, participant];
     set({ participants: newParticipants });
@@ -276,9 +295,17 @@ export const useNetStore = create<NetStore>((set, get) => ({
       get().addLogEntry({
         fromCallsign: participant.callsign,
         toCallsign: 'NC',
-        message: initialTraffic ? `check in - ${initialTraffic}` : 'check in',
+        message: participant.hasTraffic
+          ? initialTraffic
+            ? `check in - traffic pending: ${initialTraffic}`
+            : 'check in - traffic pending'
+          : initialTraffic
+            ? `check in - ${initialTraffic}`
+            : 'check in',
       });
     }
+
+    return participant.id;
   },
 
   updateParticipant: (id, updates) => {
@@ -293,6 +320,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
       tacticalCall: (updates.tacticalCall ?? current.tacticalCall).trim(),
       name: (updates.name ?? current.name).trim(),
       location: (updates.location ?? current.location).trim(),
+      hasTraffic: updates.hasTraffic ?? current.hasTraffic ?? false,
+      trafficNote: (updates.trafficNote ?? current.trafficNote ?? '').trim(),
     };
 
     const updatedParticipants = participants.map((p) => (p.id === id ? nextParticipant : p));
@@ -434,9 +463,20 @@ export const useNetStore = create<NetStore>((set, get) => ({
     lines.push(`Date/Time,${session.dateTime}`);
     lines.push('');
     lines.push('Participants');
-    lines.push('Check-In #,Callsign,Tactical,Name,Location,Time');
+    lines.push('Check-In #,Callsign,Tactical,Name,Location,Time,Traffic,Traffic Notes');
     for (const p of participants) {
-      lines.push(`${p.checkInNumber},${p.callsign},${p.tacticalCall || ''},${p.name},${p.location},${p.checkInTime}`);
+      lines.push(
+        [
+          p.checkInNumber,
+          p.callsign,
+          p.tacticalCall || '',
+          p.name,
+          p.location,
+          p.checkInTime,
+          p.hasTraffic ? 'yes' : 'no',
+          `"${(p.trafficNote || '').replace(/"/g, '""')}"`,
+        ].join(',')
+      );
     }
     lines.push('');
     lines.push('Communications Log');
@@ -477,9 +517,101 @@ export const useNetStore = create<NetStore>((set, get) => ({
       return fields;
     };
 
+    const normalizeHeader = (value: string) => value.trim().toLowerCase();
+
+    const getField = (fields: string[], headerMap: Map<string, number>, names: string[]) => {
+      for (const name of names) {
+        const index = headerMap.get(normalizeHeader(name));
+        if (typeof index === 'number') {
+          return (fields[index] || '').trim();
+        }
+      }
+      return '';
+    };
+
+    const parseBoolean = (value: string) => ['yes', 'true', '1', 'y'].includes(value.trim().toLowerCase());
+
+    const buildImportedSession = ({
+      name,
+      frequency,
+      netControlOp,
+      netControlName,
+      preparedBy,
+      dateTime,
+      participants,
+      logEntries,
+    }: {
+      name: string;
+      frequency: string;
+      netControlOp: string;
+      netControlName: string;
+      preparedBy: string;
+      dateTime: string;
+      participants: Participant[];
+      logEntries: LogEntry[];
+    }) => {
+      const normalizedParticipants = participants.map(normalizeParticipant);
+      const netControlExists = normalizedParticipants.some(
+        (participant) => participant.callsign === netControlOp
+      );
+
+      if (!netControlExists) {
+        normalizedParticipants.unshift({
+          id: uuidv4(),
+          callsign: netControlOp,
+          tacticalCall: 'NET',
+          name: netControlName,
+          location: '',
+          checkInTime: dateTime,
+          checkInNumber:
+            normalizedParticipants.reduce(
+              (max, participant) => Math.max(max, participant.checkInNumber),
+              0
+            ) + 1,
+          hasTraffic: false,
+          trafficNote: '',
+        });
+      }
+
+      const session: NetSession = {
+        id: uuidv4(),
+        name,
+        frequency,
+        netControlOp,
+        netControlName,
+        preparedBy,
+        dateTime,
+        endTime: null,
+        status: 'active',
+      };
+
+      const startTimeValue = new Date(dateTime).getTime();
+      set({
+        session,
+        participants: normalizedParticipants,
+        logEntries,
+        lastAcknowledgedEntryId: null,
+        startTime: Number.isNaN(startTimeValue) ? null : startTimeValue,
+        isLoading: false,
+        error: null,
+      });
+
+      saveSessionData({
+        session,
+        participants: normalizedParticipants,
+        logEntries,
+        lastAcknowledgedEntryId: null,
+      });
+    };
+
     try {
-      const normalized = csvText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+      set({ error: null });
+      const normalized = csvText.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
       const lines = normalized.split('\n');
+      const trimmedLines = lines.map((line) => line.trim()).filter(Boolean);
+      if (trimmedLines.length === 0) {
+        throw new Error('CSV file is empty.');
+      }
       const getValueAfterLabel = (label: string) => {
         const line = lines.find((row) => row.startsWith(`${label},`));
         if (!line) return '';
@@ -499,6 +631,84 @@ export const useNetStore = create<NetStore>((set, get) => ({
       const participants: Participant[] = [];
       const logEntries: LogEntry[] = [];
       let section: 'participants' | 'log' | null = null;
+      const looksLikeStructuredExport =
+        trimmedLines.includes('Participants') || trimmedLines.includes('Communications Log');
+
+      if (!looksLikeStructuredExport) {
+        const rows = lines.filter((line) => line.trim()).map(parseCsvLine);
+        const header = rows[0];
+        const headerMap = new Map(header.map((value, index) => [normalizeHeader(value), index]));
+        const hasLogColumns =
+          headerMap.has('entry #') ||
+          (headerMap.has('time') &&
+            (headerMap.has('from') || headerMap.has('from callsign')) &&
+            (headerMap.has('to') || headerMap.has('to callsign')) &&
+            (headerMap.has('message') || headerMap.has('remarks') || headerMap.has('subject/remarks')));
+
+        if (!hasLogColumns) {
+          throw new Error(
+            'Unsupported CSV format. Import either a full exported session CSV or a log table with time/from/to/message columns.'
+          );
+        }
+
+        const importedLogEntries: LogEntry[] = [];
+        const participantMap = new Map<string, Participant>();
+
+        rows.slice(1).forEach((fields, rowIndex) => {
+          const fromCallsign = getField(fields, headerMap, ['From', 'From Callsign']).toUpperCase();
+          const toCallsign = getField(fields, headerMap, ['To', 'To Callsign']).toUpperCase();
+          const message = getField(fields, headerMap, ['Message', 'Remarks', 'Subject/Remarks']);
+          const time = getField(fields, headerMap, ['Time']) || dateTime;
+          const entryNumberRaw = getField(fields, headerMap, ['Entry #', 'Entry', '#']);
+
+          if (!fromCallsign && !toCallsign && !message) {
+            return;
+          }
+
+          const entryNumber = Number.parseInt(entryNumberRaw, 10);
+          importedLogEntries.push({
+            id: uuidv4(),
+            entryNumber: Number.isFinite(entryNumber) ? entryNumber : rowIndex + 1,
+            time,
+            fromCallsign,
+            toCallsign,
+            message,
+          });
+
+          [fromCallsign, toCallsign].forEach((token) => {
+            if (!token || token === 'NC' || token === 'ALL') return;
+            if (!participantMap.has(token)) {
+              participantMap.set(token, {
+                id: uuidv4(),
+                callsign: token,
+                tacticalCall: '',
+                name: '',
+                location: '',
+                checkInTime: dateTime,
+                checkInNumber: participantMap.size + 1,
+                hasTraffic: /traffic pending/i.test(message),
+                trafficNote: '',
+              });
+            }
+          });
+        });
+
+        if (importedLogEntries.length === 0) {
+          throw new Error('No log entries were found in the CSV.');
+        }
+
+        buildImportedSession({
+          name,
+          frequency,
+          netControlOp,
+          netControlName,
+          preparedBy,
+          dateTime,
+          participants: Array.from(participantMap.values()),
+          logEntries: importedLogEntries,
+        });
+        return;
+      }
 
       for (const line of lines) {
         if (!line.trim()) continue;
@@ -517,7 +727,16 @@ export const useNetStore = create<NetStore>((set, get) => ({
 
         const fields = parseCsvLine(line);
         if (section === 'participants') {
-          const [checkInNumberRaw, callsignRaw, tacticalCall, nameField, location, checkInTime] =
+          const [
+            checkInNumberRaw,
+            callsignRaw,
+            tacticalCall,
+            nameField,
+            location,
+            checkInTime,
+            hasTrafficRaw,
+            trafficNote,
+          ] =
             fields;
           if (!callsignRaw) continue;
           const checkInNumber = Number.parseInt(checkInNumberRaw, 10);
@@ -529,6 +748,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
             location: (location || '').trim(),
             checkInTime: (checkInTime || '').trim() || dateTime,
             checkInNumber: Number.isFinite(checkInNumber) ? checkInNumber : participants.length + 1,
+            hasTraffic: parseBoolean(hasTrafficRaw || ''),
+            trafficNote: (trafficNote || '').trim(),
           });
         } else if (section === 'log') {
           const [entryNumberRaw, time, fromCallsign, toCallsign, message] = fields;
@@ -545,54 +766,19 @@ export const useNetStore = create<NetStore>((set, get) => ({
         }
       }
 
-      const netControlExists = participants.some(
-        (participant) => participant.callsign === netControlOp
-      );
-      if (!netControlExists) {
-        const nextCheckIn =
-          participants.reduce((max, participant) => Math.max(max, participant.checkInNumber), 0) + 1;
-        participants.unshift({
-          id: uuidv4(),
-          callsign: netControlOp,
-          tacticalCall: 'NET',
-          name: netControlName,
-          location: '',
-          checkInTime: dateTime,
-          checkInNumber: nextCheckIn,
-        });
-      }
-
-      const session: NetSession = {
-        id: uuidv4(),
+      buildImportedSession({
         name,
         frequency,
         netControlOp,
         netControlName,
         preparedBy,
         dateTime,
-        endTime: null,
-        status: 'active',
-      };
-
-      const startTimeValue = new Date(dateTime).getTime();
-      set({
-        session,
         participants,
         logEntries,
-        lastAcknowledgedEntryId: null,
-        startTime: Number.isNaN(startTimeValue) ? null : startTimeValue,
-        isLoading: false,
-        error: null,
-      });
-
-      saveSessionData({
-        session,
-        participants,
-        logEntries,
-        lastAcknowledgedEntryId: null,
       });
     } catch (err) {
-      set({ error: `Failed to import CSV: ${err}` });
+      const message = err instanceof Error ? err.message : String(err);
+      set({ error: `Failed to import CSV: ${message}` });
     }
   },
 

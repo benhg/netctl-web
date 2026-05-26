@@ -10,7 +10,7 @@ function formatDuration(ms: number): string {
 }
 
 export function Header() {
-  const { session, getElapsedTime, openSession, closeSession, importFromCsv } = useNetStore();
+  const { session, getElapsedTime, openSession, closeSession, importFromCsv, error } = useNetStore();
   const [elapsed, setElapsed] = useState(0);
   const [currentTime, setCurrentTime] = useState(new Date());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,6 +59,11 @@ export function Header() {
                 className="hidden"
               />
             </div>
+            {error && (
+              <div className="mt-3 max-w-xl rounded border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+                {error}
+              </div>
+            )}
           </div>
           <div className="text-sm font-mono text-slate-300">
             <span>{currentTime.toLocaleTimeString()} Local</span>
