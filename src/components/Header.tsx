@@ -1,5 +1,6 @@
 import { useRef, useState, useEffect, type ChangeEvent } from 'react';
 import { useNetStore } from '../stores/netStore';
+import { IdentTimer } from './IdentTimer';
 
 function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
@@ -128,6 +129,7 @@ export function Header() {
               <span>{currentTime.toISOString().slice(11, 19)}Z</span>
             </div>
           </div>
+          <IdentTimer isActive={session.status === 'active'} sessionId={session.id} />
           <div className="text-xs text-slate-400">
             Started: {new Date(session.dateTime).toLocaleString()}
           </div>

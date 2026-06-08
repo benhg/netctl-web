@@ -31,3 +31,23 @@ body {
     "Liberation Mono", Menlo, monospace;
   font-variant-numeric: tabular-nums;
 }
+
+@keyframes ident-reminder-shake {
+  0%,
+  75%,
+  100% {
+    transform: translateX(0);
+  }
+  78%,
+  86% {
+    transform: translateX(-2px);
+  }
+  82%,
+  90% {
+    transform: translateX(2px);
+  }
+}
+
+.ident-reminder-shake {
+  animation: ident-reminder-shake 2.8s ease-in-out infinite;
+}
