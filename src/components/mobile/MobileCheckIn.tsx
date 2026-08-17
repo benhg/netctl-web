@@ -23,6 +23,7 @@ export function MobileCheckIn() {
     lookupCallsign,
     checkInDraft,
     patchCheckInDraft,
+    setCheckInDraftCallsign,
     clearCheckInDraft,
   } = useNetStore();
   const { callsign, tacticalCall, name, location, hasTraffic } = checkInDraft;
@@ -57,7 +58,14 @@ export function MobileCheckIn() {
     const stillEditing =
       draft.callsign.trim().toUpperCase() === target.toUpperCase() && !draft.name && !draft.location;
     if (result && stillEditing) {
-      patchCheckInDraft({ name: result.name, location: formatLocation(result.city, result.state) });
+      const place = formatLocation(result.city, result.state);
+      patchCheckInDraft({
+        name: result.name,
+        location: place,
+        // Marked as the registry's, so correcting the callsign replaces them.
+        nameFromLookup: Boolean(result.name),
+        locationFromLookup: Boolean(place),
+      });
     }
     setIsLookingUp(false);
   };
@@ -74,6 +82,8 @@ export function MobileCheckIn() {
       location: location.trim(),
       hasTraffic,
       initialTraffic: checkInDraft.note.trim(),
+      nameFromLookup: checkInDraft.nameFromLookup,
+      locationFromLookup: checkInDraft.locationFromLookup,
     });
 
     // Fill name and QTH from the lookup when it lands, without making the
@@ -92,7 +102,9 @@ export function MobileCheckIn() {
           const nextLocation = formatLocation(result.city, result.state);
           if (nextLocation) updates.location = nextLocation;
         }
-        if (Object.keys(updates).length > 0) updateParticipant(id, updates);
+        if (Object.keys(updates).length > 0) {
+          updateParticipant(id, updates, { fromLookup: true });
+        }
       });
     }
 
@@ -119,7 +131,7 @@ export function MobileCheckIn() {
             ref={callsignRef}
             type="text"
             value={callsign}
-            onChange={(e) => patchCheckInDraft({ callsign: e.target.value.toUpperCase() })}
+            onChange={(e) => setCheckInDraftCallsign(e.target.value.toUpperCase())}
             onFocus={selectAllOnFocus}
             onBlur={handleCallsignBlur}
             placeholder="CALLSIGN"
@@ -165,7 +177,8 @@ export function MobileCheckIn() {
             <input
               type="text"
               value={name}
-              onChange={(e) => patchCheckInDraft({ name: e.target.value })}
+              // Typing here takes the field off the registry.
+              onChange={(e) => patchCheckInDraft({ name: e.target.value, nameFromLookup: false })}
               onFocus={selectAllOnFocus}
               placeholder="Name"
               aria-label="Name"
@@ -174,7 +187,9 @@ export function MobileCheckIn() {
             <input
               type="text"
               value={location}
-              onChange={(e) => patchCheckInDraft({ location: e.target.value })}
+              onChange={(e) =>
+                patchCheckInDraft({ location: e.target.value, locationFromLookup: false })
+              }
               onFocus={selectAllOnFocus}
               placeholder="Location/QTH"
               aria-label="Location or QTH"

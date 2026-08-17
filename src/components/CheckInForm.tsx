@@ -9,6 +9,7 @@ export function CheckInForm() {
     session,
     checkInDraft,
     patchCheckInDraft,
+    setCheckInDraftCallsign,
     clearCheckInDraft,
   } = useNetStore();
   const { callsign, tacticalCall, name, location, hasTraffic, note } = checkInDraft;
@@ -41,9 +42,13 @@ export function CheckInForm() {
         !draft.name &&
         !draft.location;
       if (result && stillEditing) {
+        const place = formatLookupLocation(result.city, result.state);
         patchCheckInDraft({
           name: result.name,
-          location: formatLookupLocation(result.city, result.state),
+          location: place,
+          // Marked as the registry's, so correcting the callsign replaces them.
+          nameFromLookup: Boolean(result.name),
+          locationFromLookup: Boolean(place),
         });
       }
       setIsLookingUp(false);
@@ -81,6 +86,12 @@ export function CheckInForm() {
       location: trimmedLocation || resolvedLocation,
       hasTraffic,
       initialTraffic: note.trim(),
+      // Provenance follows the value: whatever the operator typed is theirs,
+      // whatever a lookup supplied stays refreshable after check-in.
+      nameFromLookup: trimmedName ? checkInDraft.nameFromLookup : Boolean(lookupResult?.name),
+      locationFromLookup: trimmedLocation
+        ? checkInDraft.locationFromLookup
+        : Boolean(resolvedLocation),
     });
 
     if (lookupPromise) {
@@ -100,7 +111,7 @@ export function CheckInForm() {
           }
         }
         if (Object.keys(updates).length > 0) {
-          updateParticipant(participantId, updates);
+          updateParticipant(participantId, updates, { fromLookup: true });
         }
       });
     }
@@ -141,7 +152,7 @@ export function CheckInForm() {
           ref={callsignRef}
           type="text"
           value={callsign}
-          onChange={(e) => patchCheckInDraft({ callsign: e.target.value.toUpperCase() })}
+          onChange={(e) => setCheckInDraftCallsign(e.target.value.toUpperCase())}
           onFocus={selectAllOnFocus}
           onBlur={handleCallsignBlur}
           placeholder="Callsign *"
@@ -160,7 +171,9 @@ export function CheckInForm() {
         <input
           type="text"
           value={name}
-          onChange={(e) => patchCheckInDraft({ name: e.target.value })}
+          // Typing here takes the field off the registry: it survives a later
+          // callsign correction.
+          onChange={(e) => patchCheckInDraft({ name: e.target.value, nameFromLookup: false })}
           onFocus={selectAllOnFocus}
           placeholder="Name"
           aria-label="Name"
@@ -169,7 +182,9 @@ export function CheckInForm() {
         <input
           type="text"
           value={location}
-          onChange={(e) => patchCheckInDraft({ location: e.target.value })}
+          onChange={(e) =>
+            patchCheckInDraft({ location: e.target.value, locationFromLookup: false })
+          }
           onFocus={selectAllOnFocus}
           placeholder="Location/QTH"
           aria-label="Location or QTH"

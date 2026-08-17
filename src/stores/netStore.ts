@@ -95,6 +95,9 @@ const normalizeParticipant = (participant: Participant): Participant => ({
     : undefined,
   // Sessions stored before ACK mode existed have no pending stations.
   acked: participant.acked ?? true,
+  // Unprovenanced values are the operator's: a callsign correction leaves them.
+  nameFromLookup: participant.nameFromLookup ?? false,
+  locationFromLookup: participant.locationFromLookup ?? false,
 });
 
 const nextCheckInNumber = (participants: Participant[]) =>
@@ -141,6 +144,9 @@ export type CheckInDraft = {
   location: string;
   hasTraffic: boolean;
   note: string;
+  /** Same provenance rule as Participant, for the not-yet-checked-in station. */
+  nameFromLookup: boolean;
+  locationFromLookup: boolean;
 };
 
 export type LogDraft = {
@@ -156,6 +162,8 @@ const EMPTY_CHECK_IN_DRAFT: CheckInDraft = {
   location: '',
   hasTraffic: false,
   note: '',
+  nameFromLookup: false,
+  locationFromLookup: false,
 };
 
 const EMPTY_LOG_DRAFT: LogDraft = { fromCallsign: '', toCallsign: 'NC', message: '' };
@@ -173,6 +181,13 @@ interface NetStore {
 
   // Draft actions
   patchCheckInDraft: (patch: Partial<CheckInDraft>) => void;
+  /**
+   * Set the draft callsign, dropping any name/QTH the previous callsign's
+   * lookup supplied. Both check-in forms go through this so the rule lives in
+   * one place, and emptying those fields also re-arms the blur lookup, which
+   * only runs when they are blank.
+   */
+  setCheckInDraftCallsign: (callsign: string) => void;
   clearCheckInDraft: () => void;
   patchLogDraft: (patch: Partial<LogDraft>) => void;
   clearLogDraft: () => void;
@@ -193,7 +208,15 @@ interface NetStore {
   ) => string;
   updateParticipant: (
     id: string,
-    updates: Partial<Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'>>
+    updates: Partial<Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'>>,
+    options?: {
+      /**
+       * This write is a registry lookup result, not the operator. It marks the
+       * fields it fills as lookup-owned, and never triggers a refresh of its
+       * own. Every other caller is treated as the operator typing.
+       */
+      fromLookup?: boolean;
+    }
   ) => void;
   getDisplayCallsign: (callsign: string) => string;
   removeParticipant: (id: string) => void;
@@ -255,6 +278,18 @@ export const useNetStore = create<NetStore>((set, get) => ({
 
   patchCheckInDraft: (patch) => {
     set({ checkInDraft: { ...get().checkInDraft, ...patch } });
+  },
+
+  setCheckInDraftCallsign: (callsign) => {
+    const draft = get().checkInDraft;
+    set({
+      checkInDraft: {
+        ...draft,
+        callsign,
+        name: draft.nameFromLookup ? '' : draft.name,
+        location: draft.locationFromLookup ? '' : draft.location,
+      },
+    });
   },
 
   clearCheckInDraft: () => {
@@ -378,6 +413,10 @@ export const useNetStore = create<NetStore>((set, get) => ({
       trafficNote: participantData.initialTraffic?.trim() ?? '',
       trafficSince: participantData.hasTraffic ? new Date().toISOString() : undefined,
       acked: !session?.requireAck,
+      // Carried over from the draft, so a name the lookup supplied there stays
+      // refreshable after check-in and one the operator typed stays theirs.
+      nameFromLookup: participantData.nameFromLookup ?? false,
+      locationFromLookup: participantData.locationFromLookup ?? false,
     };
     const newParticipants = [...participants, participant];
     set({ participants: newParticipants });
@@ -409,7 +448,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
     return participant.id;
   },
 
-  updateParticipant: (id, updates) => {
+  updateParticipant: (id, updates, options) => {
     const { participants, session, logEntries, lastAcknowledgedEntryId } = get();
     const current = participants.find((p) => p.id === id);
     if (!current) return;
@@ -417,13 +456,49 @@ export const useNetStore = create<NetStore>((set, get) => ({
     const wasFlagged = current.hasTraffic ?? false;
     const isFlagged = updates.hasTraffic ?? wasFlagged;
 
+    const fromLookup = options?.fromLookup ?? false;
+    /*
+     * Provenance of name/QTH. A lookup marks what it fills as its own; the
+     * operator setting a field to a new value takes it over. Passing a field
+     * back unchanged (the Edit form submits all of them) leaves it as it was.
+     */
+    const ownership = (field: 'name' | 'location') => {
+      const key = field === 'name' ? 'nameFromLookup' : 'locationFromLookup';
+      const incoming = updates[field];
+      const held = current[key] ?? false;
+      if (incoming === undefined) return held;
+      if (fromLookup) return true;
+      return incoming.trim() === current[field] ? held : false;
+    };
+    const nameFromLookup = ownership('name');
+    const locationFromLookup = ownership('location');
+
+    // A corrected callsign invalidates whatever the old one's lookup filled in.
+    // Blank those fields now so a wrong name never outlives the correction, even
+    // by the length of a network round trip, and refill below if the registry
+    // knows the new call. Operator-typed values are left alone.
+    const callsignCorrection =
+      !fromLookup &&
+      typeof updates.callsign === 'string' &&
+      updates.callsign.trim().toUpperCase() !== current.callsign;
+    /*
+     * Only lookup-owned fields go stale, and `ownership` has already cleared the
+     * flag on anything the operator changed in this same write — so this needs
+     * no test for whether the update carried the field. That matters for the
+     * Edit form, which resubmits name and QTH untouched on every save.
+     */
+    const staleName = callsignCorrection && nameFromLookup;
+    const staleLocation = callsignCorrection && locationFromLookup;
+
     const nextParticipant: Participant = {
       ...current,
       ...updates,
+      nameFromLookup,
+      locationFromLookup,
       callsign: (updates.callsign ?? current.callsign).trim(),
       tacticalCall: (updates.tacticalCall ?? current.tacticalCall).trim(),
-      name: (updates.name ?? current.name).trim(),
-      location: (updates.location ?? current.location).trim(),
+      name: staleName ? '' : (updates.name ?? current.name).trim(),
+      location: staleLocation ? '' : (updates.location ?? current.location).trim(),
       hasTraffic: isFlagged,
       trafficNote: (updates.trafficNote ?? current.trafficNote ?? '').trim(),
       // Stamp when traffic is raised and hold that time while it stays raised,
@@ -468,6 +543,30 @@ export const useNetStore = create<NetStore>((set, get) => ({
         logEntries: updatedLogEntries,
         lastAcknowledgedEntryId,
       });
+    }
+
+    // Refill what the correction just blanked, from the new callsign's entry.
+    if (callsignCorrection && (staleName || staleLocation)) {
+      const corrected = nextParticipant.callsign;
+      get()
+        .lookupCallsign(corrected)
+        .then((result) => {
+          if (!result) return;
+          // The operator may have corrected the call again, typed the fields in
+          // by hand, or removed the station while this was in flight; a stale
+          // answer must not overwrite any of that.
+          const latest = get().participants.find((p) => p.id === id);
+          if (!latest || latest.callsign !== corrected) return;
+          const refill: Partial<Participant> = {};
+          if (staleName && !latest.name && result.name) refill.name = result.name;
+          if (staleLocation && !latest.location) {
+            const place = [result.city, result.state].filter(Boolean).join(', ').trim();
+            if (place) refill.location = place;
+          }
+          if (Object.keys(refill).length > 0) {
+            get().updateParticipant(id, refill, { fromLookup: true });
+          }
+        });
     }
   },
 
@@ -589,14 +688,24 @@ export const useNetStore = create<NetStore>((set, get) => ({
       const cs = data?.hamdb?.callsign;
       if (!cs) return null;
 
-      const nameParts = [cs.fname, cs.name].filter(Boolean).join(' ');
+      /*
+       * An unknown callsign is not an error to hamdb: it answers 200 with every
+       * field set to the string NOT_FOUND. Taken at face value that lands a
+       * station named "NOT_FOUND NOT_FOUND" in the log, so treat it as a miss
+       * and drop any field carrying the sentinel.
+       */
+      const real = (value: unknown) =>
+        typeof value === 'string' && value !== 'NOT_FOUND' ? value : '';
+      if (real(cs.call) === '' || data?.hamdb?.messages?.status === 'NOT_FOUND') return null;
+
+      const nameParts = [real(cs.fname), real(cs.name)].filter(Boolean).join(' ');
       const result: CallsignLookupResult = {
-        callsign: cs.call || normalized,
+        callsign: real(cs.call) || normalized,
         name: nameParts,
-        city: cs.addr2 || '',
-        state: cs.state || '',
-        country: cs.country || 'USA',
-        grid: cs.grid || '',
+        city: real(cs.addr2),
+        state: real(cs.state),
+        country: real(cs.country) || 'USA',
+        grid: real(cs.grid),
       };
 
       cache[normalized] = { result, cachedAt: Date.now() };
