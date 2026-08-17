@@ -146,26 +146,50 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
           </label>
         </div>
       </div>
-      {/* Only worth its height when something is actually waiting. */}
-      {trafficQueue.length > 0 && (
-        <div className="mb-1.5 flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">
-            Traffic
-          </span>
-          <span className="text-xs font-semibold text-white">
-            {nextTraffic?.tacticalCall || nextTraffic?.callsign}
-          </span>
-          <span className="min-w-0 flex-1 truncate text-xs text-amber-100/80">
-            {trafficQueue
-              .slice(1)
-              .map((p) => p.tacticalCall || p.callsign)
-              .join(' · ')}
-          </span>
-          <span className="shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-200">
-            {trafficQueue.length}
-          </span>
-        </div>
-      )}
+      {/*
+       * Always present, empty or not. It holds one line either way, so the rows
+       * below never shift under the pointer when traffic arrives or clears, and
+       * "no traffic waiting" is itself worth stating during a net.
+       */}
+      <div
+        className={`mb-1.5 flex items-center gap-2 rounded border px-2 py-1 ${
+          trafficQueue.length > 0
+            ? 'border-amber-500/30 bg-amber-500/10'
+            : 'border-slate-700 bg-slate-900/40'
+        }`}
+      >
+        <span
+          className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide ${
+            trafficQueue.length > 0 ? 'text-amber-300' : 'text-slate-500'
+          }`}
+        >
+          Traffic
+        </span>
+        {trafficQueue.length > 0 ? (
+          <>
+            <span className="shrink-0 text-xs font-semibold text-white">
+              {nextTraffic?.tacticalCall || nextTraffic?.callsign}
+            </span>
+            <span className="min-w-0 flex-1 truncate text-xs text-amber-100/80">
+              {trafficQueue
+                .slice(1)
+                .map((p) => p.tacticalCall || p.callsign)
+                .join(' · ')}
+            </span>
+          </>
+        ) : (
+          <span className="min-w-0 flex-1 text-xs text-slate-500">No traffic waiting</span>
+        )}
+        <span
+          className={`shrink-0 rounded-full px-1.5 text-[11px] font-semibold ${
+            trafficQueue.length > 0
+              ? 'bg-amber-500/20 text-amber-200'
+              : 'bg-slate-700/50 text-slate-400'
+          }`}
+        >
+          {trafficQueue.length}
+        </span>
+      </div>
       <div className="flex-1 min-h-0 space-y-1 overflow-y-auto">
         {orderedParticipants.map((p) => {
           const lastTx = getLastTransmission(p.callsign);
