@@ -28,10 +28,19 @@ export function CheckInForm() {
   };
 
   const handleCallsignBlur = async () => {
-    if (callsign.length >= 3 && !name && !location) {
+    const target = callsign.trim();
+    if (target.length >= 3 && !name && !location) {
       setIsLookingUp(true);
-      const result = await lookupCallsign(callsign);
-      if (result) {
+      const result = await lookupCallsign(target);
+      // The draft is shared and is cleared on check-in, so a result that lands
+      // late must not repopulate it — that text would belong to the previous
+      // station. Same for fields the operator has filled in meanwhile.
+      const draft = useNetStore.getState().checkInDraft;
+      const stillEditing =
+        draft.callsign.trim().toUpperCase() === target.toUpperCase() &&
+        !draft.name &&
+        !draft.location;
+      if (result && stillEditing) {
         patchCheckInDraft({
           name: result.name,
           location: formatLookupLocation(result.city, result.state),
@@ -138,7 +147,6 @@ export function CheckInForm() {
           placeholder="Callsign *"
           aria-label="Callsign"
           className="field log-data-face w-[8.5rem] font-semibold uppercase"
-          disabled={isLookingUp}
         />
         <input
           type="text"
@@ -181,12 +189,20 @@ export function CheckInForm() {
         />
       )}
       <div className="mt-1.5 flex items-center gap-3">
+        {/*
+         * Never blocked by an in-flight lookup. Clicking Check In blurs the
+         * callsign field, which starts the lookup — so gating on it made the
+         * button dead exactly when it was clicked, and every station took two
+         * clicks. Checking in first is also the right order: the station is on
+         * the roster immediately, and handleSubmit fills the name and QTH when
+         * the registry answers.
+         */}
         <button
           type="submit"
-          disabled={!callsign.trim() || isLookingUp}
+          disabled={!callsign.trim()}
           className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-600"
         >
-          {isLookingUp ? 'Looking up...' : 'Check In'}
+          Check In
         </button>
         <label className="flex items-center gap-1.5 text-xs text-slate-300">
           <input
@@ -206,6 +222,8 @@ export function CheckInForm() {
             + Note
           </button>
         )}
+        {/* Right-aligned so showing it never shifts the controls. */}
+        {isLookingUp && <span className="ml-auto text-xs text-slate-500">Looking up…</span>}
       </div>
     </form>
   );

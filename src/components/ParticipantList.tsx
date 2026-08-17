@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNetStore } from '../stores/netStore';
+import { usePendingCallsign } from '../hooks/usePendingCallsign';
 import { trafficQueueOf } from '../lib/traffic';
 import type { Participant } from '../types';
 
@@ -31,7 +32,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
   const [editTrafficNote, setEditTrafficNote] = useState('');
   // Pending callsigns are edited in place; hold the keystrokes locally so the
   // store (and its log-entry rewrite) is only touched once, on commit.
-  const [callsignDrafts, setCallsignDrafts] = useState<Record<string, string>>({});
+  const pendingCallsign = usePendingCallsign();
 
   const startEditing = (participant: Participant) => {
     setEditingId(participant.id);
@@ -64,24 +65,6 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
       trafficNote: editTrafficNote.trim(),
     });
     cancelEditing();
-  };
-
-  const clearDraft = (id: string) => {
-    setCallsignDrafts((drafts) => {
-      if (!(id in drafts)) return drafts;
-      const next = { ...drafts };
-      delete next[id];
-      return next;
-    });
-  };
-
-  const commitCallsign = (participant: Participant) => {
-    const draft = callsignDrafts[participant.id];
-    clearDraft(participant.id);
-    if (draft === undefined) return;
-    const next = draft.toUpperCase().trim();
-    if (!next || next === participant.callsign) return;
-    updateParticipant(participant.id, { callsign: next });
   };
 
   const getLastTransmission = (callsign: string) => {
@@ -222,24 +205,11 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                 <span className="w-5 shrink-0 text-[11px] text-slate-500">{p.checkInNumber}</span>
                 <input
                   type="text"
-                  value={callsignDrafts[p.id] ?? p.callsign}
-                  onChange={(e) =>
-                    setCallsignDrafts((drafts) => ({
-                      ...drafts,
-                      [p.id]: e.target.value.toUpperCase(),
-                    }))
-                  }
+                  value={pendingCallsign.valueFor(p)}
+                  onChange={(e) => pendingCallsign.setValue(p.id, e.target.value)}
                   onFocus={selectAllOnFocus}
-                  onBlur={() => commitCallsign(p)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      e.currentTarget.blur();
-                    } else if (e.key === 'Escape') {
-                      clearDraft(p.id);
-                      e.currentTarget.blur();
-                    }
-                  }}
+                  onBlur={() => pendingCallsign.commit(p)}
+                  onKeyDown={pendingCallsign.handleKeyDown}
                   disabled={!isActive}
                   aria-label={`Callsign for pending station #${p.checkInNumber}`}
                   className="log-data-face w-[7.5rem] rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-sm font-semibold uppercase text-sky-200 focus:border-sky-400 focus:outline-none disabled:opacity-60"

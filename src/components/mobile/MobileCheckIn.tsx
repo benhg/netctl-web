@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { useNetStore } from '../../stores/netStore';
+import { usePendingCallsign } from '../../hooks/usePendingCallsign';
 
 const selectAllOnFocus = (event: React.FocusEvent<HTMLInputElement>) => {
   event.target.select();
@@ -28,6 +29,8 @@ export function MobileCheckIn() {
   const [showDetails, setShowDetails] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const callsignRef = useRef<HTMLInputElement>(null);
+  // Same draft-then-commit editing as the desktop roster.
+  const pendingCallsign = usePendingCallsign();
 
   const isActive = session?.status === 'active';
   const pending = participants.filter((p) => !p.acked);
@@ -42,10 +45,18 @@ export function MobileCheckIn() {
    * work at all on a phone.
    */
   const handleCallsignBlur = async () => {
-    if (callsign.trim().length < 3 || name || location) return;
+    const target = callsign.trim();
+    if (target.length < 3 || name || location) return;
     setIsLookingUp(true);
-    const result = await lookupCallsign(callsign);
-    if (result) {
+    const result = await lookupCallsign(target);
+    // Tapping Check In blurs the field first, so this lookup can land after the
+    // station is already logged and the draft cleared. The draft is shared, so
+    // writing into it then would seed the NEXT station with this one's name and
+    // QTH — and the mobile form skips its own lookup when those are filled.
+    const draft = useNetStore.getState().checkInDraft;
+    const stillEditing =
+      draft.callsign.trim().toUpperCase() === target.toUpperCase() && !draft.name && !draft.location;
+    if (result && stillEditing) {
       patchCheckInDraft({ name: result.name, location: formatLocation(result.city, result.state) });
     }
     setIsLookingUp(false);
@@ -70,10 +81,17 @@ export function MobileCheckIn() {
     if (!name.trim() && !location.trim()) {
       lookupCallsign(normalized).then((result) => {
         if (!result) return;
+        // Re-read the station: the operator may have filled these in by hand
+        // while the lookup was in flight, and the registry must not overwrite
+        // what they typed.
+        const participant = useNetStore.getState().participants.find((p) => p.id === id);
+        if (!participant) return;
         const updates: { name?: string; location?: string } = {};
-        if (result.name) updates.name = result.name;
-        const nextLocation = formatLocation(result.city, result.state);
-        if (nextLocation) updates.location = nextLocation;
+        if (!participant.name && result.name) updates.name = result.name;
+        if (!participant.location) {
+          const nextLocation = formatLocation(result.city, result.state);
+          if (nextLocation) updates.location = nextLocation;
+        }
         if (Object.keys(updates).length > 0) updateParticipant(id, updates);
       });
     }
@@ -213,11 +231,11 @@ export function MobileCheckIn() {
                 <div className="min-w-0 flex-1">
                   <input
                     type="text"
-                    value={p.callsign}
-                    onChange={(e) =>
-                      updateParticipant(p.id, { callsign: e.target.value.toUpperCase() })
-                    }
+                    value={pendingCallsign.valueFor(p)}
+                    onChange={(e) => pendingCallsign.setValue(p.id, e.target.value)}
                     onFocus={selectAllOnFocus}
+                    onBlur={() => pendingCallsign.commit(p)}
+                    onKeyDown={pendingCallsign.handleKeyDown}
                     aria-label={`Callsign for pending station ${p.checkInNumber}`}
                     autoCapitalize="characters"
                     autoCorrect="off"
