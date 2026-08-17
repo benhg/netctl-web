@@ -8,6 +8,7 @@ export function NewSessionForm() {
   const [netControlOp, setNetControlOp] = useState('');
   const [netControlName, setNetControlName] = useState('');
   const [preparedBy, setPreparedBy] = useState('');
+  const [requireAck, setRequireAck] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -20,6 +21,7 @@ export function NewSessionForm() {
       netControlOp: netControlOp.toUpperCase().trim(),
       netControlName: netControlName.trim(),
       preparedBy: preparedBy.trim(),
+      requireAck,
     });
   };
 
@@ -101,6 +103,23 @@ export function NewSessionForm() {
               className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
             />
           </div>
+
+          {/* Set the check-in style up front; still switchable mid-net from the
+              Checked In Stations header. */}
+          <label className="flex cursor-pointer items-start gap-2 rounded border border-slate-700 bg-slate-900/60 p-2.5">
+            <input
+              type="checkbox"
+              checked={requireAck}
+              onChange={(e) => setRequireAck(e.target.checked)}
+              className="mt-0.5 h-4 w-4 shrink-0 rounded border-slate-500 bg-slate-900 text-sky-500 focus:ring-sky-500"
+            />
+            <span>
+              <span className="block text-sm text-slate-200">Require ACK</span>
+              <span className="block text-xs text-slate-400">
+                Stations wait for net control to acknowledge them before joining the roster.
+              </span>
+            </span>
+          </label>
 
           <button
             type="submit"
