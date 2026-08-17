@@ -35,7 +35,9 @@ export function ICS309Preview() {
   const operationalPeriodEnd = getOperationalPeriodEnd();
 
   return (
-    <div className="bg-white text-black p-6 rounded-lg shadow-lg max-h-[600px] overflow-y-auto">
+    /* Fills the height that is left rather than a fixed 600px, so the preview is
+       usable on a short laptop screen and on a tall monitor alike. */
+    <div className="min-h-0 flex-1 overflow-y-auto rounded-lg bg-white p-4 text-black shadow-lg">
       <div className="border-2 border-black">
         {/* Header */}
         <div className="border-b-2 border-black p-2 bg-gray-100">

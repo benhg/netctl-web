@@ -14,6 +14,10 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
   const [message, setMessage] = useState('');
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
+  const selectAllOnFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+    event.target.select();
+  };
+
   useEffect(() => {
     if (selectedParticipant) {
       // Use tactical call if available, otherwise use callsign
@@ -74,61 +78,59 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
   }
 
   return (
-    <form onSubmit={handleSubmit} className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-      <h2 className="text-lg font-semibold text-white mb-3">Add Log Entry</h2>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">From</label>
-          <input
-            type="text"
-            value={fromCallsign}
-            onChange={(e) => setFromCallsign(e.target.value)}
-            placeholder="Callsign or Tactical"
-            list="callsign-list"
-            autoComplete="off"
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">To</label>
-          <input
-            type="text"
-            value={toCallsign}
-            onChange={(e) => setToCallsign(e.target.value)}
-            placeholder="NC"
-            list="callsign-list"
-            autoComplete="off"
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-        </div>
+    <form onSubmit={handleSubmit} className="panel shrink-0">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-white">Add Log Entry</h2>
+        <span className="text-[11px] text-slate-500">Enter to add · Shift+Enter for a new line</span>
       </div>
-      <div className="mb-3">
-        <label className="block text-xs text-slate-400 mb-1">Message/Remarks</label>
+      {/* From / To / message on one line; the message takes the slack. */}
+      <div className="flex flex-wrap items-start gap-1.5">
+        <input
+          type="text"
+          value={fromCallsign}
+          onChange={(e) => setFromCallsign(e.target.value)}
+          onFocus={selectAllOnFocus}
+          placeholder="From"
+          aria-label="From callsign"
+          list="callsign-list"
+          autoComplete="off"
+          className="field log-data-face w-[8.5rem] font-semibold"
+        />
+        <input
+          type="text"
+          value={toCallsign}
+          onChange={(e) => setToCallsign(e.target.value)}
+          onFocus={selectAllOnFocus}
+          placeholder="To"
+          aria-label="To callsign"
+          list="callsign-list"
+          autoComplete="off"
+          className="field log-data-face w-[8.5rem] font-semibold"
+        />
         <textarea
           ref={messageRef}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleMessageKeyDown}
           placeholder="Traffic, announcements, or remarks..."
-          rows={2}
-          className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
+          rows={1}
+          aria-label="Message or remarks"
+          className="field min-w-0 flex-1 basis-64 resize-none"
         />
-      </div>
-      <div className="flex gap-2">
         <button
           type="submit"
           disabled={!fromCallsign.trim()}
-          className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-medium rounded transition-colors"
+          className="rounded bg-green-600 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-green-700 disabled:cursor-not-allowed disabled:bg-slate-600"
         >
-          Add Entry
+          Add
         </button>
         {selectedParticipant && (
           <button
             type="button"
             onClick={onClear}
-            className="px-4 py-2 bg-slate-600 hover:bg-slate-500 text-white rounded transition-colors"
+            className="rounded bg-slate-600 px-2.5 py-1 text-sm text-white transition-colors hover:bg-slate-500"
           >
-            Clear Selection
+            Clear
           </button>
         )}
       </div>

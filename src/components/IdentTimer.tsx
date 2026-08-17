@@ -83,12 +83,17 @@ export function IdentTimer({ isActive, sessionId }: IdentTimerProps) {
   if (!isActive) return null;
 
   return (
-    <div className="mt-3 flex items-center justify-end gap-3">
+    <div className="flex items-center gap-1">
       <button
         type="button"
         onClick={handleAcknowledge}
         disabled={disabled}
-        className={`min-w-32 rounded border px-3 py-2 text-left transition-colors ${
+        title={
+          disabled
+            ? 'Ident timer disabled'
+            : 'Time until the next station identification — click when you have identified'
+        }
+        className={`flex items-center gap-1.5 rounded border px-2 py-1 transition-colors ${
           disabled
             ? 'cursor-not-allowed border-slate-600 bg-slate-700/50 text-slate-400'
             : isDue
@@ -97,21 +102,19 @@ export function IdentTimer({ isActive, sessionId }: IdentTimerProps) {
         }`}
         aria-live="polite"
       >
-        <div className="text-xs font-semibold uppercase text-slate-400">
-          Ident
-        </div>
-        <div className="font-mono text-lg leading-6">
-          {disabled ? '--:--' : isDue ? 'Due now' : formatCountdown(remainingMs)}
-        </div>
+        <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">ID</span>
+        <span className="log-data-face text-sm leading-none tabular-nums">
+          {disabled ? '--:--' : isDue ? 'DUE' : formatCountdown(remainingMs)}
+        </span>
       </button>
-      <label className="flex items-center gap-2 text-xs text-slate-300">
+      <label className="flex items-center" title="Disable ident timer">
         <input
           type="checkbox"
           checked={disabled}
           onChange={(event) => handleDisabledChange(event.target.checked)}
-          className="h-4 w-4 rounded border-slate-500 bg-slate-800 accent-blue-500"
+          aria-label="Disable ident timer"
+          className="h-3.5 w-3.5 rounded border-slate-500 bg-slate-800 accent-blue-500"
         />
-        Disable timer
       </label>
     </div>
   );

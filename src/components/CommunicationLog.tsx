@@ -32,23 +32,29 @@ export function CommunicationLog() {
     const participant = findParticipant(callsign);
 
     if (!participant) {
-      return <span className="log-data-face text-base font-semibold tracking-[0.08em] text-slate-100">{callsign}</span>;
+      return (
+        <span className="log-data-face text-sm font-semibold tracking-[0.06em] text-slate-100">
+          {callsign}
+        </span>
+      );
     }
 
+    // One line: tactical badge and callsign inline, with the operator name in
+    // the tooltip rather than a second row under every entry.
     return (
-      <div className="flex flex-col leading-snug">
-        <div className="flex items-center gap-2.5">
-          {participant.tacticalCall && (
-            <span className="rounded bg-yellow-400/15 px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-yellow-200">
-              {participant.tacticalCall}
-            </span>
-          )}
-          <span className="log-data-face text-[17px] font-semibold tracking-[0.08em] text-sky-100">
-            {participant.callsign}
+      <span
+        className="flex items-center gap-1.5"
+        title={participant.name || participant.callsign}
+      >
+        {participant.tacticalCall && (
+          <span className="shrink-0 rounded bg-yellow-400/15 px-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-yellow-200">
+            {participant.tacticalCall}
           </span>
-        </div>
-        {participant.name && <span className="pt-0.5 text-[13px] text-slate-200">{participant.name}</span>}
-      </div>
+        )}
+        <span className="log-data-face truncate text-sm font-semibold tracking-[0.06em] text-sky-100">
+          {participant.callsign}
+        </span>
+      </span>
     );
   };
 
@@ -78,45 +84,59 @@ export function CommunicationLog() {
   };
 
   return (
-    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1 overflow-hidden flex flex-col">
-      <div className="flex justify-between items-center mb-3">
-        <h2 className="log-heading-face text-lg font-semibold text-white">Communications Log</h2>
-        <span className="text-sm text-slate-400">{logEntries.length} entries</span>
+    <div className="panel flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="mb-1.5 flex items-center justify-between">
+        <h2 className="log-heading-face text-sm font-semibold text-white">
+          Communications Log
+          <span className="ml-1.5 font-normal text-slate-400">{logEntries.length}</span>
+        </h2>
       </div>
       {logEntries.length === 0 ? (
-        <p className="text-slate-400 text-sm">No log entries yet</p>
+        <p className="text-xs text-slate-400">No log entries yet</p>
       ) : (
-        <div className="overflow-y-auto flex-1">
-          <table className="w-full text-[15px]">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full table-fixed text-sm">
             <thead className="sticky top-0 bg-slate-800/95 backdrop-blur">
-              <tr className="log-heading-face border-b border-slate-700 text-left text-[11px] uppercase tracking-[0.12em] text-slate-400">
-                <th className="pb-3 pr-3 w-12">#</th>
-                <th className="pb-3 pr-3 w-24">Time</th>
-                <th className="pb-3 pr-3 w-40">From</th>
-                <th className="pb-3 pr-3 w-40">To</th>
-                <th className="pb-3">Message</th>
-                <th className="pb-3 w-20">Ack</th>
+              <tr className="log-heading-face border-b border-slate-700 text-left text-[10px] uppercase tracking-[0.1em] text-slate-400">
+                <th className="w-8 pb-1 pr-2 font-semibold">#</th>
+                <th className="w-16 pb-1 pr-2 font-semibold">Time</th>
+                <th className="w-32 pb-1 pr-2 font-semibold">From</th>
+                <th className="w-32 pb-1 pr-2 font-semibold">To</th>
+                <th className="pb-1 pr-2 font-semibold">Message</th>
+                <th className="w-14 pb-1 font-semibold">Ack</th>
               </tr>
             </thead>
             <tbody>
               {logEntries.map((entry) => (
                 <tr
                   key={entry.id}
-                  className={`border-b border-slate-700/50 ${rowClassNames[classifyEntry(entry)]}`}
+                  className={`border-b border-slate-700/50 align-middle ${rowClassNames[classifyEntry(entry)]}`}
                 >
-                  <td className="log-data-face py-3 pr-3 text-sm text-slate-500">{entry.entryNumber}</td>
-                  <td className="log-data-face py-3 pr-3 text-[15px] font-medium text-slate-100">{formatTime(entry.time)}</td>
-                  <td className="py-3 pr-3 align-top">{renderCallsign(entry.fromCallsign)}</td>
-                  <td className="py-3 pr-3 align-top">{renderCallsign(entry.toCallsign)}</td>
-                  <td className="py-3 leading-relaxed text-slate-50">{entry.message || '-'}</td>
-                  <td className="py-3 align-top">
+                  <td className="log-data-face py-[var(--row-pad-y)] pr-2 text-xs text-slate-500">
+                    {entry.entryNumber}
+                  </td>
+                  <td className="log-data-face py-[var(--row-pad-y)] pr-2 text-xs font-medium tabular-nums text-slate-100">
+                    {formatTime(entry.time)}
+                  </td>
+                  <td className="py-[var(--row-pad-y)] pr-2">
+                    {renderCallsign(entry.fromCallsign)}
+                  </td>
+                  <td className="py-[var(--row-pad-y)] pr-2">{renderCallsign(entry.toCallsign)}</td>
+                  {/* Wraps rather than truncating: the message is the record. */}
+                  <td className="py-[var(--row-pad-y)] pr-2 leading-snug break-words text-slate-50">
+                    {entry.message || '-'}
+                  </td>
+                  <td className="py-[var(--row-pad-y)]">
                     {lastAcknowledgedEntryId === entry.id ? (
-                      <span className="log-heading-face text-xs font-semibold uppercase tracking-[0.08em] text-emerald-300">NC ACK</span>
+                      <span className="log-heading-face text-[11px] font-semibold uppercase tracking-[0.06em] text-emerald-300">
+                        ACK
+                      </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => setLastAcknowledgedEntry(entry.id)}
-                        className="log-heading-face text-xs uppercase tracking-[0.08em] text-slate-300 hover:text-white"
+                        title="Mark as the last entry net control acknowledged"
+                        className="log-heading-face min-h-5 px-1 text-[11px] uppercase tracking-[0.06em] text-slate-400 hover:text-white"
                       >
                         Mark
                       </button>

@@ -9,6 +9,7 @@ export function CheckInForm() {
   const [location, setLocation] = useState('');
   const [hasTraffic, setHasTraffic] = useState(false);
   const [initialTraffic, setInitialTraffic] = useState('');
+  const [noteOpen, setNoteOpen] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const callsignRef = useRef<HTMLInputElement>(null);
   const lookupTimeoutMs = 200;
@@ -96,6 +97,7 @@ export function CheckInForm() {
     setLocation('');
     setHasTraffic(false);
     setInitialTraffic('');
+    setNoteOpen(false);
     callsignRef.current?.focus();
   };
 
@@ -114,92 +116,96 @@ export function CheckInForm() {
     return null;
   }
 
+  // The note field costs a permanent block of height for something most
+  // check-ins never use, so it is revealed on demand or when traffic is flagged.
+  const showNote = hasTraffic || noteOpen || initialTraffic.trim().length > 0;
+
   return (
-    <form onSubmit={handleSubmit} className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-      <h2 className="text-lg font-semibold text-white mb-3">Check In Station</h2>
-      <div className="grid grid-cols-2 gap-3 mb-3">
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Callsign *</label>
-          <input
-            ref={callsignRef}
-            type="text"
-            value={callsign}
-            onChange={(e) => setCallsign(e.target.value.toUpperCase())}
-            onFocus={selectAllOnFocus}
-            onBlur={handleCallsignBlur}
-            placeholder="W1ABC"
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 uppercase"
-            disabled={isLookingUp}
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Tactical Call</label>
-          <input
-            type="text"
-            value={tacticalCall}
-            onChange={(e) => setTacticalCall(e.target.value)}
-            onFocus={selectAllOnFocus}
-            placeholder="Command, Base, Mobile 1..."
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onFocus={selectAllOnFocus}
-            placeholder="John Smith"
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs text-slate-400 mb-1">Location/QTH</label>
-          <input
-            type="text"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            onFocus={selectAllOnFocus}
-            placeholder="Boston, MA"
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
-          />
-        </div>
-        <div className="col-span-2">
-          <div className="flex items-center justify-between mb-1">
-            <label className="block text-xs text-slate-400">Initial Traffic</label>
-            <label className="flex items-center gap-2 text-xs text-slate-300">
-              <input
-                type="checkbox"
-                checked={hasTraffic}
-                onChange={(e) => setHasTraffic(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
-              />
-              Traffic waiting
-            </label>
-          </div>
-          <textarea
-            value={initialTraffic}
-            onChange={(e) => setInitialTraffic(e.target.value)}
-            placeholder={
-              hasTraffic
-                ? 'Short note about the pending traffic...'
-                : 'Brief traffic or remarks for the check-in log...'
-            }
-            rows={2}
-            className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 resize-none"
-          />
-        </div>
+    <form onSubmit={handleSubmit} className="panel shrink-0">
+      <div className="mb-1.5 flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-white">Check In Station</h2>
+        <span className="text-[11px] text-slate-500">F2</span>
       </div>
-      <div className="flex items-center justify-between">
+      {/* Placeholders carry the field names, so no label rows are needed. */}
+      <div className="flex flex-wrap gap-1.5">
+        <input
+          ref={callsignRef}
+          type="text"
+          value={callsign}
+          onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+          onFocus={selectAllOnFocus}
+          onBlur={handleCallsignBlur}
+          placeholder="Callsign *"
+          aria-label="Callsign"
+          className="field log-data-face w-[8.5rem] font-semibold uppercase"
+          disabled={isLookingUp}
+        />
+        <input
+          type="text"
+          value={tacticalCall}
+          onChange={(e) => setTacticalCall(e.target.value)}
+          onFocus={selectAllOnFocus}
+          placeholder="Tactical"
+          aria-label="Tactical call"
+          className="field w-[7rem]"
+        />
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onFocus={selectAllOnFocus}
+          placeholder="Name"
+          aria-label="Name"
+          className="field min-w-0 flex-1 basis-32"
+        />
+        <input
+          type="text"
+          value={location}
+          onChange={(e) => setLocation(e.target.value)}
+          onFocus={selectAllOnFocus}
+          placeholder="Location/QTH"
+          aria-label="Location or QTH"
+          className="field min-w-0 flex-1 basis-32"
+        />
+      </div>
+      {showNote && (
+        <textarea
+          value={initialTraffic}
+          onChange={(e) => setInitialTraffic(e.target.value)}
+          placeholder={
+            hasTraffic ? 'Note about the pending traffic...' : 'Remarks for the check-in log...'
+          }
+          rows={1}
+          aria-label="Initial traffic or remarks"
+          className="field mt-1.5 resize-none"
+        />
+      )}
+      <div className="mt-1.5 flex items-center gap-3">
         <button
           type="submit"
           disabled={!callsign.trim() || isLookingUp}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white font-medium rounded transition-colors"
+          className="rounded bg-blue-600 px-3 py-1 text-sm font-medium text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-slate-600"
         >
           {isLookingUp ? 'Looking up...' : 'Check In'}
         </button>
-        <p className="text-xs text-slate-500">Press F2 to focus callsign field</p>
+        <label className="flex items-center gap-1.5 text-xs text-slate-300">
+          <input
+            type="checkbox"
+            checked={hasTraffic}
+            onChange={(e) => setHasTraffic(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
+          />
+          Traffic
+        </label>
+        {!showNote && (
+          <button
+            type="button"
+            onClick={() => setNoteOpen(true)}
+            className="text-xs text-slate-400 transition-colors hover:text-slate-200"
+          >
+            + Note
+          </button>
+        )}
       </div>
     </form>
   );

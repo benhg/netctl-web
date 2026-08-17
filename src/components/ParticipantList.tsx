@@ -83,20 +83,24 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
     updateParticipant(participant.id, { callsign: next });
   };
 
-  const getLastTransmission = (callsign: string): string | null => {
+  const getLastTransmission = (callsign: string) => {
     const entries = logEntries.filter(
       (e) => e.fromCallsign === callsign || e.toCallsign === callsign
     );
     if (entries.length === 0) return null;
-    const last = entries[entries.length - 1];
-    return new Date(last.time).toLocaleTimeString();
+    const time = new Date(entries[entries.length - 1].time);
+    return {
+      // HH:MM is enough to read at a glance; seconds live in the tooltip.
+      short: time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }),
+      full: time.toLocaleTimeString(),
+    };
   };
 
   if (participants.length === 0) {
     return (
-      <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1">
-        <h2 className="text-lg font-semibold text-white mb-3">Checked In Stations</h2>
-        <p className="text-slate-400 text-sm">No stations checked in yet</p>
+      <div className="panel flex-1">
+        <h2 className="text-sm font-semibold text-white">Checked In Stations</h2>
+        <p className="mt-1 text-xs text-slate-400">No stations checked in yet</p>
       </div>
     );
   }
@@ -111,21 +115,27 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
   const orderedParticipants = [...participants].reverse();
 
   return (
-    <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1 min-h-0 flex flex-col">
-      <div className="flex justify-between items-center gap-3 mb-3">
-        <h2 className="text-lg font-semibold text-white">Checked In Stations</h2>
-        <div className="flex items-center gap-3">
+    <div className="panel @container flex min-h-0 flex-1 flex-col">
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <h2 className="text-sm font-semibold text-white">
+          Checked In Stations
+          <span className="ml-1.5 font-normal text-slate-400">{participants.length}</span>
+        </h2>
+        <div className="flex items-center gap-2.5">
           {pendingCount > 0 && (
             <button
               type="button"
               onClick={ackAllPending}
               disabled={!isActive}
-              className="rounded bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-600"
+              className="min-h-6 rounded bg-sky-600 px-2.5 text-xs font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-600"
             >
               ACK all ({pendingCount})
             </button>
           )}
-          <label className="flex items-center gap-1.5 text-xs text-slate-300">
+          <label
+            className="flex items-center gap-1.5 text-xs text-slate-300"
+            title="New check-ins wait for a net control acknowledgement"
+          >
             <input
               type="checkbox"
               checked={session?.requireAck ?? false}
@@ -134,37 +144,29 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
             />
             Require ACK
           </label>
-          <span className="text-sm text-slate-400">{participants.length} stations</span>
         </div>
       </div>
-      <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase tracking-wide text-amber-300">Traffic Queue</div>
-            <div className="text-sm text-white">
-              {nextTraffic
-                ? `Next traffic: ${nextTraffic.tacticalCall || nextTraffic.callsign}`
-                : 'No pending traffic'}
-            </div>
-          </div>
-          <div className="rounded-full bg-amber-500/20 px-3 py-1 text-xs font-semibold text-amber-200">
-            {trafficQueue.length} waiting
-          </div>
+      {/* Only worth its height when something is actually waiting. */}
+      {trafficQueue.length > 0 && (
+        <div className="mb-1.5 flex items-center gap-2 rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+            Traffic
+          </span>
+          <span className="text-xs font-semibold text-white">
+            {nextTraffic?.tacticalCall || nextTraffic?.callsign}
+          </span>
+          <span className="min-w-0 flex-1 truncate text-xs text-amber-100/80">
+            {trafficQueue
+              .slice(1)
+              .map((p) => p.tacticalCall || p.callsign)
+              .join(' · ')}
+          </span>
+          <span className="shrink-0 rounded-full bg-amber-500/20 px-1.5 text-[11px] font-semibold text-amber-200">
+            {trafficQueue.length}
+          </span>
         </div>
-        {trafficQueue.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {trafficQueue.map((participant, index) => (
-              <span
-                key={participant.id}
-                className="rounded-full bg-slate-900/70 px-2 py-1 text-xs text-amber-100"
-              >
-                #{index + 1} {participant.tacticalCall || participant.callsign}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-      <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
+      )}
+      <div className="flex-1 min-h-0 space-y-1 overflow-y-auto">
         {orderedParticipants.map((p) => {
           const lastTx = getLastTransmission(p.callsign);
           const trafficIndex = trafficQueue.findIndex((participant) => participant.id === p.id);
@@ -175,9 +177,9 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
             return (
               <div
                 key={p.id}
-                className="flex items-center gap-2 rounded border border-sky-500/40 bg-sky-950/40 p-2"
+                className="data-row flex items-center gap-1.5 rounded border border-sky-500/40 bg-sky-950/40 px-1.5"
               >
-                <span className="w-6 shrink-0 text-xs text-slate-500">#{p.checkInNumber}</span>
+                <span className="w-5 shrink-0 text-[11px] text-slate-500">{p.checkInNumber}</span>
                 <input
                   type="text"
                   value={callsignDrafts[p.id] ?? p.callsign}
@@ -200,9 +202,9 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                   }}
                   disabled={!isActive}
                   aria-label={`Callsign for pending station #${p.checkInNumber}`}
-                  className="w-32 rounded border border-slate-600 bg-slate-900 px-2 py-1 font-mono text-sm font-semibold uppercase text-sky-200 focus:border-sky-400 focus:outline-none disabled:opacity-60"
+                  className="log-data-face w-[7.5rem] rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-sm font-semibold uppercase text-sky-200 focus:border-sky-400 focus:outline-none disabled:opacity-60"
                 />
-                <label className="flex items-center gap-1.5 text-xs text-slate-300">
+                <label className="flex items-center gap-1 text-xs text-slate-300">
                   <input
                     type="checkbox"
                     checked={p.hasTraffic ?? false}
@@ -217,12 +219,14 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                   />
                   Traffic
                 </label>
-                <div className="ml-auto flex items-center gap-2">
+                <div className="ml-auto flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => ackParticipant(p.id)}
                     disabled={!isActive}
-                    className="rounded bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-600"
+                    /* Clicked constantly during a check-in run, so it keeps a
+                       comfortable target even at the tightest density. */
+                    className="min-h-6 rounded bg-sky-600 px-3 text-xs font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-600"
                   >
                     ACK
                   </button>
@@ -230,7 +234,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                     type="button"
                     onClick={() => removeParticipant(p.id)}
                     disabled={!isActive}
-                    className="px-1 text-sm text-red-400 transition-colors hover:text-red-300 disabled:text-slate-600"
+                    className="min-h-6 px-1.5 text-sm text-red-400 transition-colors hover:text-red-300 disabled:text-slate-600"
                     aria-label={`Remove ${p.callsign}`}
                   >
                     &times;
@@ -243,9 +247,9 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
           return (
             <div
               key={p.id}
-              className={`flex items-center justify-between p-2 rounded transition-colors group ${
+              className={`group data-row flex items-center gap-1.5 rounded px-1.5 transition-colors ${
                 p.hasTraffic
-                  ? 'bg-amber-950/40 border border-amber-500/30 hover:bg-amber-900/40'
+                  ? 'border border-amber-500/30 bg-amber-950/40 hover:bg-amber-900/40'
                   : 'bg-slate-900 hover:bg-slate-700'
               }`}
             >
@@ -331,62 +335,102 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                 </div>
               ) : (
                 <>
+                  <label
+                    className="flex shrink-0 items-center"
+                    onClick={(e) => e.stopPropagation()}
+                    title="Has traffic"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={p.hasTraffic ?? false}
+                      onChange={(e) =>
+                        updateParticipant(p.id, {
+                          hasTraffic: e.target.checked,
+                          trafficNote: e.target.checked ? p.trafficNote : '',
+                        })
+                      }
+                      disabled={!isActive}
+                      aria-label={`${p.callsign} has traffic`}
+                      className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
+                    />
+                  </label>
+                  {/*
+                   * One line per station: identity keeps its full size, and the
+                   * softer details truncate first as the column narrows.
+                   */}
                   <button
                     onClick={() => onSelectParticipant(p)}
-                    className="flex-1 text-left"
+                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
                     disabled={!isActive}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="text-xs text-slate-500 w-6">#{p.checkInNumber}</span>
-                      <label
-                        className="flex items-center gap-2 text-xs text-slate-300"
-                        onClick={(e) => e.stopPropagation()}
+                    <span className="w-5 shrink-0 text-[11px] text-slate-500">
+                      {p.checkInNumber}
+                    </span>
+                    {trafficIndex >= 0 && (
+                      <span
+                        className="shrink-0 rounded bg-amber-500/20 px-1 text-[10px] font-semibold text-amber-200"
+                        title={`Traffic queue position ${trafficIndex + 1}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={p.hasTraffic ?? false}
-                          onChange={(e) =>
-                            updateParticipant(p.id, {
-                              hasTraffic: e.target.checked,
-                              trafficNote: e.target.checked ? p.trafficNote : '',
-                            })
-                          }
-                          disabled={!isActive}
-                          className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
-                        />
-                      </label>
-                      {typeof trafficIndex === 'number' && trafficIndex >= 0 && (
-                        <span className="rounded-full bg-amber-500/20 px-2 py-0.5 text-[11px] font-semibold text-amber-200">
-                          Traffic #{trafficIndex + 1}
-                        </span>
-                      )}
-                      {p.tacticalCall && (
-                        <span className="font-semibold text-yellow-400">{p.tacticalCall}</span>
-                      )}
-                      <span className="font-mono text-blue-400 font-semibold">{p.callsign}</span>
-                      <span className="text-white">{p.name}</span>
-                      <span className="text-slate-400 text-sm">{p.location}</span>
-                    </div>
-                    {lastTx && (
-                      <div className="text-xs text-slate-500 ml-9">Last TX: {lastTx}</div>
+                        T{trafficIndex + 1}
+                      </span>
+                    )}
+                    {p.tacticalCall && (
+                      <span className="shrink-0 text-sm font-semibold text-yellow-400">
+                        {p.tacticalCall}
+                      </span>
+                    )}
+                    <span className="log-data-face shrink-0 text-sm font-semibold text-blue-400">
+                      {p.callsign}
+                    </span>
+                    {p.name && (
+                      <span className="min-w-0 truncate text-sm text-white" title={p.name}>
+                        {p.name}
+                      </span>
+                    )}
+                    {/*
+                     * Location and last-TX are dropped by the column's own width,
+                     * not the window's, so a narrow left panel spends its pixels
+                     * on the callsign and name instead of clipping all four.
+                     */}
+                    {p.location && (
+                      <span
+                        className="hidden min-w-0 truncate text-xs text-slate-400 @min-[26rem]:inline"
+                        title={p.location}
+                      >
+                        {p.location}
+                      </span>
                     )}
                     {p.hasTraffic && p.trafficNote && (
-                      <div className="text-xs text-amber-200 ml-9">Traffic: {p.trafficNote}</div>
+                      <span
+                        className="hidden min-w-0 truncate text-xs text-amber-200 @min-[32rem]:inline"
+                        title={p.trafficNote}
+                      >
+                        {p.trafficNote}
+                      </span>
+                    )}
+                    {lastTx && (
+                      <span
+                        className="log-data-face ml-auto hidden shrink-0 pl-1 text-[11px] tabular-nums text-slate-500 @min-[22rem]:inline"
+                        title={`Last transmission ${lastTx.full}`}
+                      >
+                        {lastTx.short}
+                      </span>
                     )}
                   </button>
                   {isActive && (
-                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-1 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
                       <button
                         onClick={() => startEditing(p)}
-                        className="text-slate-300 hover:text-white text-sm px-2"
+                        className="px-1 text-xs text-slate-300 hover:text-white"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => removeParticipant(p.id)}
-                        className="text-red-400 hover:text-red-300 text-sm px-2"
+                        className="px-1 text-sm text-red-400 hover:text-red-300"
+                        aria-label={`Remove ${p.callsign}`}
                       >
-                        Remove
+                        &times;
                       </button>
                     </div>
                   )}

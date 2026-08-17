@@ -58,26 +58,26 @@ function App() {
       {!session ? (
         <NewSessionForm />
       ) : (
-        <div className="p-4 flex-1 flex flex-col min-h-0 overflow-hidden">
-          {/* Top toolbar */}
-          <div className="flex justify-between items-center mb-4 shrink-0">
+        <div className="flex min-h-0 flex-1 flex-col gap-[var(--panel-gap)] overflow-hidden p-[var(--panel-gap)]">
+          {/* Toolbar: one thin strip, aligned with the panels below it. */}
+          <div className="flex shrink-0 items-center justify-between gap-2">
             <div className="flex gap-2">
               <button
                 onClick={() => setShowPreview(!showPreview)}
-                className={`px-3 py-1.5 text-sm rounded transition-colors ${
+                className={`rounded px-2.5 py-1 text-xs transition-colors ${
                   showPreview
                     ? 'bg-blue-600 text-white'
-                    : 'bg-slate-700 hover:bg-slate-600 text-white'
+                    : 'bg-slate-700 text-white hover:bg-slate-600'
                 }`}
               >
-                {showPreview ? 'Hide Preview' : 'Show ICS 309 Preview'}
+                {showPreview ? 'Hide Preview' : 'ICS 309 Preview'}
               </button>
               <ExportButtons />
             </div>
             {session.status === 'closed' && (
               <button
                 onClick={reset}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors"
+                className="rounded bg-slate-700 px-2.5 py-1 text-xs text-white transition-colors hover:bg-slate-600"
               >
                 New Session
               </button>
@@ -87,15 +87,26 @@ function App() {
           {showPreview ? (
             <ICS309Preview />
           ) : (
-            <div className="grid grid-cols-12 gap-4 flex-1 min-h-0 overflow-hidden">
-              {/* Left column - Forms */}
-              <div className="col-span-4 flex flex-col gap-4 min-h-0">
+            /*
+             * Narrow or split-screen windows stack the columns; from lg up they
+             * sit side by side. The left column is capped in rem from xl up so an
+             * ultrawide gives its extra pixels to the log table instead of
+             * stretching the check-in fields to absurd widths.
+             */
+            <div className="grid min-h-0 flex-1 grid-cols-1 gap-[var(--panel-gap)] overflow-y-auto lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:overflow-hidden xl:grid-cols-[26rem_minmax(0,1fr)] 2xl:grid-cols-[30rem_minmax(0,1fr)]">
+              {/*
+               * Stacked below lg, each section keeps a usable minimum height and
+               * the page scrolls, rather than splitting a short window into two
+               * lists too small to read.
+               */}
+              {/* Left column - check-in and roster */}
+              <div className="flex min-h-0 flex-col gap-[var(--panel-gap)] max-lg:min-h-[20rem]">
                 <CheckInForm />
                 <ParticipantList onSelectParticipant={setSelectedParticipant} />
               </div>
 
               {/* Right column - Log */}
-              <div className="col-span-8 flex flex-col gap-4 min-h-0">
+              <div className="flex min-h-0 flex-col gap-[var(--panel-gap)] max-lg:min-h-[20rem]">
                 <LogEntryForm
                   selectedParticipant={selectedParticipant}
                   onClear={() => setSelectedParticipant(null)}
