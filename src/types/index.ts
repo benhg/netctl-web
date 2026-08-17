@@ -8,6 +8,8 @@ export interface NetSession {
   dateTime: string;
   endTime: string | null;
   status: 'pending' | 'active' | 'closed';
+  /** Net control must acknowledge each station that calls in. */
+  requireAck?: boolean;
 }
 
 export interface Participant {
@@ -20,6 +22,8 @@ export interface Participant {
   checkInNumber: number;
   hasTraffic?: boolean;
   trafficNote?: string;
+  /** False while the station is waiting for a net control acknowledgement. */
+  acked?: boolean;
 }
 
 export interface LogEntry {

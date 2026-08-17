@@ -13,6 +13,12 @@ export function CheckInForm() {
   const callsignRef = useRef<HTMLInputElement>(null);
   const lookupTimeoutMs = 200;
 
+  // Focusing a field selects what is there, so a wrong value is typed over
+  // rather than deleted first.
+  const selectAllOnFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+    event.target.select();
+  };
+
   const formatLookupLocation = (city: string, state: string) => {
     return [city, state].filter(Boolean).join(', ').trim();
   };
@@ -119,6 +125,7 @@ export function CheckInForm() {
             type="text"
             value={callsign}
             onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+            onFocus={selectAllOnFocus}
             onBlur={handleCallsignBlur}
             placeholder="W1ABC"
             className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 uppercase"
@@ -131,6 +138,7 @@ export function CheckInForm() {
             type="text"
             value={tacticalCall}
             onChange={(e) => setTacticalCall(e.target.value)}
+            onFocus={selectAllOnFocus}
             placeholder="Command, Base, Mobile 1..."
             className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
           />
@@ -141,6 +149,7 @@ export function CheckInForm() {
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
+            onFocus={selectAllOnFocus}
             placeholder="John Smith"
             className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
           />
@@ -151,6 +160,7 @@ export function CheckInForm() {
             type="text"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
+            onFocus={selectAllOnFocus}
             placeholder="Boston, MA"
             className="w-full px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
           />

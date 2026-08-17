@@ -6,8 +6,21 @@ interface ParticipantListProps {
   onSelectParticipant: (participant: Participant) => void;
 }
 
+const selectAllOnFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+  event.target.select();
+};
+
 export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
-  const { participants, logEntries, removeParticipant, updateParticipant, session } = useNetStore();
+  const {
+    participants,
+    logEntries,
+    removeParticipant,
+    updateParticipant,
+    ackParticipant,
+    ackAllPending,
+    setRequireAck,
+    session,
+  } = useNetStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editCallsign, setEditCallsign] = useState('');
   const [editTacticalCall, setEditTacticalCall] = useState('');
@@ -15,6 +28,9 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
   const [editLocation, setEditLocation] = useState('');
   const [editHasTraffic, setEditHasTraffic] = useState(false);
   const [editTrafficNote, setEditTrafficNote] = useState('');
+  // Pending callsigns are edited in place; hold the keystrokes locally so the
+  // store (and its log-entry rewrite) is only touched once, on commit.
+  const [callsignDrafts, setCallsignDrafts] = useState<Record<string, string>>({});
 
   const startEditing = (participant: Participant) => {
     setEditingId(participant.id);
@@ -49,6 +65,24 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
     cancelEditing();
   };
 
+  const clearDraft = (id: string) => {
+    setCallsignDrafts((drafts) => {
+      if (!(id in drafts)) return drafts;
+      const next = { ...drafts };
+      delete next[id];
+      return next;
+    });
+  };
+
+  const commitCallsign = (participant: Participant) => {
+    const draft = callsignDrafts[participant.id];
+    clearDraft(participant.id);
+    if (draft === undefined) return;
+    const next = draft.toUpperCase().trim();
+    if (!next || next === participant.callsign) return;
+    updateParticipant(participant.id, { callsign: next });
+  };
+
   const getLastTransmission = (callsign: string): string | null => {
     const entries = logEntries.filter(
       (e) => e.fromCallsign === callsign || e.toCallsign === callsign
@@ -67,16 +101,41 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
     );
   }
 
+  const isActive = session?.status === 'active';
   const trafficQueue = participants
     .filter((participant) => participant.hasTraffic)
     .sort((a, b) => a.checkInNumber - b.checkInNumber);
   const nextTraffic = trafficQueue[0] ?? null;
+  const pendingCount = participants.filter((p) => !p.acked).length;
+  // Newest check-in first, so stations still calling in are at the top.
+  const orderedParticipants = [...participants].reverse();
 
   return (
     <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 flex-1 min-h-0 flex flex-col">
-      <div className="flex justify-between items-center mb-3">
+      <div className="flex justify-between items-center gap-3 mb-3">
         <h2 className="text-lg font-semibold text-white">Checked In Stations</h2>
-        <span className="text-sm text-slate-400">{participants.length} stations</span>
+        <div className="flex items-center gap-3">
+          {pendingCount > 0 && (
+            <button
+              type="button"
+              onClick={ackAllPending}
+              disabled={!isActive}
+              className="rounded bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-600"
+            >
+              ACK all ({pendingCount})
+            </button>
+          )}
+          <label className="flex items-center gap-1.5 text-xs text-slate-300">
+            <input
+              type="checkbox"
+              checked={session?.requireAck ?? false}
+              onChange={(e) => setRequireAck(e.target.checked)}
+              className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-sky-500 focus:ring-sky-500"
+            />
+            Require ACK
+          </label>
+          <span className="text-sm text-slate-400">{participants.length} stations</span>
+        </div>
       </div>
       <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
         <div className="flex items-center justify-between gap-3">
@@ -106,9 +165,81 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
         )}
       </div>
       <div className="space-y-2 flex-1 min-h-0 overflow-y-auto">
-        {participants.map((p) => {
+        {orderedParticipants.map((p) => {
           const lastTx = getLastTransmission(p.callsign);
           const trafficIndex = trafficQueue.findIndex((participant) => participant.id === p.id);
+
+          // Waiting for acknowledgement: one compact line, callsign editable in
+          // place because a mis-heard call is corrected before it is ACKed.
+          if (!p.acked) {
+            return (
+              <div
+                key={p.id}
+                className="flex items-center gap-2 rounded border border-sky-500/40 bg-sky-950/40 p-2"
+              >
+                <span className="w-6 shrink-0 text-xs text-slate-500">#{p.checkInNumber}</span>
+                <input
+                  type="text"
+                  value={callsignDrafts[p.id] ?? p.callsign}
+                  onChange={(e) =>
+                    setCallsignDrafts((drafts) => ({
+                      ...drafts,
+                      [p.id]: e.target.value.toUpperCase(),
+                    }))
+                  }
+                  onFocus={selectAllOnFocus}
+                  onBlur={() => commitCallsign(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.currentTarget.blur();
+                    } else if (e.key === 'Escape') {
+                      clearDraft(p.id);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  disabled={!isActive}
+                  aria-label={`Callsign for pending station #${p.checkInNumber}`}
+                  className="w-32 rounded border border-slate-600 bg-slate-900 px-2 py-1 font-mono text-sm font-semibold uppercase text-sky-200 focus:border-sky-400 focus:outline-none disabled:opacity-60"
+                />
+                <label className="flex items-center gap-1.5 text-xs text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={p.hasTraffic ?? false}
+                    onChange={(e) =>
+                      updateParticipant(p.id, {
+                        hasTraffic: e.target.checked,
+                        trafficNote: e.target.checked ? p.trafficNote : '',
+                      })
+                    }
+                    disabled={!isActive}
+                    className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
+                  />
+                  Traffic
+                </label>
+                <div className="ml-auto flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => ackParticipant(p.id)}
+                    disabled={!isActive}
+                    className="rounded bg-sky-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 disabled:cursor-not-allowed disabled:bg-slate-600"
+                  >
+                    ACK
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => removeParticipant(p.id)}
+                    disabled={!isActive}
+                    className="px-1 text-sm text-red-400 transition-colors hover:text-red-300 disabled:text-slate-600"
+                    aria-label={`Remove ${p.callsign}`}
+                  >
+                    &times;
+                  </button>
+                </div>
+              </div>
+            );
+          }
+
           return (
             <div
               key={p.id}
@@ -127,6 +258,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                         type="text"
                         value={editCallsign}
                         onChange={(e) => setEditCallsign(e.target.value.toUpperCase())}
+                        onFocus={selectAllOnFocus}
                         className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500 uppercase"
                       />
                     </div>
@@ -136,6 +268,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                         type="text"
                         value={editTacticalCall}
                         onChange={(e) => setEditTacticalCall(e.target.value)}
+                        onFocus={selectAllOnFocus}
                         className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
                       />
                     </div>
@@ -145,6 +278,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                         type="text"
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
+                        onFocus={selectAllOnFocus}
                         className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
                       />
                     </div>
@@ -154,6 +288,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                         type="text"
                         value={editLocation}
                         onChange={(e) => setEditLocation(e.target.value)}
+                        onFocus={selectAllOnFocus}
                         className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
                       />
                     </div>
@@ -171,6 +306,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                         type="text"
                         value={editTrafficNote}
                         onChange={(e) => setEditTrafficNote(e.target.value)}
+                        onFocus={selectAllOnFocus}
                         placeholder="Optional traffic note"
                         className="w-full px-2 py-1 bg-slate-800 border border-slate-600 rounded text-white text-sm focus:outline-none focus:border-blue-500"
                       />
@@ -198,7 +334,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                   <button
                     onClick={() => onSelectParticipant(p)}
                     className="flex-1 text-left"
-                    disabled={session?.status !== 'active'}
+                    disabled={!isActive}
                   >
                     <div className="flex items-center gap-3">
                       <span className="text-xs text-slate-500 w-6">#{p.checkInNumber}</span>
@@ -215,7 +351,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                               trafficNote: e.target.checked ? p.trafficNote : '',
                             })
                           }
-                          disabled={session?.status !== 'active'}
+                          disabled={!isActive}
                           className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
                         />
                       </label>
@@ -238,7 +374,7 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                       <div className="text-xs text-amber-200 ml-9">Traffic: {p.trafficNote}</div>
                     )}
                   </button>
-                  {session?.status === 'active' && (
+                  {isActive && (
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-2">
                       <button
                         onClick={() => startEditing(p)}

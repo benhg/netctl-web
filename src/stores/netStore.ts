@@ -78,6 +78,7 @@ type StoredSession = NetSession & { preparedBy?: string };
 const normalizeSession = (session: StoredSession): NetSession => ({
   ...session,
   preparedBy: session.preparedBy ?? '',
+  requireAck: session.requireAck ?? false,
 });
 
 const normalizeParticipant = (participant: Participant): Participant => ({
@@ -87,7 +88,12 @@ const normalizeParticipant = (participant: Participant): Participant => ({
   location: participant.location ?? '',
   hasTraffic: participant.hasTraffic ?? false,
   trafficNote: participant.trafficNote ?? '',
+  // Sessions stored before ACK mode existed have no pending stations.
+  acked: participant.acked ?? true,
 });
+
+const nextCheckInNumber = (participants: Participant[]) =>
+  participants.reduce((max, participant) => Math.max(max, participant.checkInNumber), 0) + 1;
 
 const saveSessionData = (data: SessionData) => {
   const sessions = readSessions();
@@ -131,6 +137,7 @@ interface NetStore {
   openSession: () => void;
   closeSession: () => void;
   loadSession: (id: string) => Promise<void>;
+  setRequireAck: (value: boolean) => void;
 
   // Participant actions
   addParticipant: (
@@ -145,6 +152,8 @@ interface NetStore {
   ) => void;
   getDisplayCallsign: (callsign: string) => string;
   removeParticipant: (id: string) => void;
+  ackParticipant: (id: string) => void;
+  ackAllPending: () => void;
 
   // Log entry actions
   addLogEntry: (entry: Omit<LogEntry, 'id' | 'entryNumber' | 'time'>) => void;
@@ -191,6 +200,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
     const session: NetSession = {
       id: uuidv4(),
       ...sessionData,
+      requireAck: sessionData.requireAck ?? false,
       dateTime: new Date().toISOString(),
       endTime: null,
       status: 'pending',
@@ -203,6 +213,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
       location: '',
       checkInTime: new Date().toISOString(),
       checkInNumber: 1,
+      acked: true,
     };
     set({
       session,
@@ -265,6 +276,15 @@ export const useNetStore = create<NetStore>((set, get) => ({
     setActiveSessionId(normalizedSession.id);
   },
 
+  setRequireAck: (value) => {
+    const { session, participants, logEntries, lastAcknowledgedEntryId } = get();
+    if (!session || session.requireAck === value) return;
+
+    const nextSession = { ...session, requireAck: value };
+    set({ session: nextSession });
+    saveSessionData({ session: nextSession, participants, logEntries, lastAcknowledgedEntryId });
+  },
+
   addParticipant: (participantData) => {
     const { participants, session } = get();
     const participant: Participant = {
@@ -274,9 +294,11 @@ export const useNetStore = create<NetStore>((set, get) => ({
       name: participantData.name,
       location: participantData.location,
       checkInTime: new Date().toISOString(),
-      checkInNumber: participants.length + 1,
+      // max + 1, not length + 1: removing a station must not reuse its number.
+      checkInNumber: nextCheckInNumber(participants),
       hasTraffic: participantData.hasTraffic ?? false,
       trafficNote: participantData.initialTraffic?.trim() ?? '',
+      acked: !session?.requireAck,
     };
     const newParticipants = [...participants, participant];
     set({ participants: newParticipants });
@@ -366,6 +388,42 @@ export const useNetStore = create<NetStore>((set, get) => ({
     set({ participants: newParticipants });
     if (session) {
       saveSessionData({ session, participants: newParticipants, logEntries, lastAcknowledgedEntryId });
+    }
+  },
+
+  ackParticipant: (id) => {
+    const { participants, session, logEntries, lastAcknowledgedEntryId } = get();
+    const target = participants.find((p) => p.id === id);
+    if (!target || target.acked) return;
+
+    const updatedParticipants = participants.map((p) =>
+      p.id === id ? { ...p, acked: true } : p
+    );
+    set({ participants: updatedParticipants });
+    if (session) {
+      saveSessionData({
+        session,
+        participants: updatedParticipants,
+        logEntries,
+        lastAcknowledgedEntryId,
+      });
+    }
+  },
+
+  ackAllPending: () => {
+    const { participants, session, logEntries, lastAcknowledgedEntryId } = get();
+    if (!participants.some((p) => !p.acked)) return;
+
+    // One state update and one write for the whole batch, however many are waiting.
+    const updatedParticipants = participants.map((p) => (p.acked ? p : { ...p, acked: true }));
+    set({ participants: updatedParticipants });
+    if (session) {
+      saveSessionData({
+        session,
+        participants: updatedParticipants,
+        logEntries,
+        lastAcknowledgedEntryId,
+      });
     }
   },
 
@@ -563,13 +621,10 @@ export const useNetStore = create<NetStore>((set, get) => ({
           name: netControlName,
           location: '',
           checkInTime: dateTime,
-          checkInNumber:
-            normalizedParticipants.reduce(
-              (max, participant) => Math.max(max, participant.checkInNumber),
-              0
-            ) + 1,
+          checkInNumber: nextCheckInNumber(normalizedParticipants),
           hasTraffic: false,
           trafficNote: '',
+          acked: true,
         });
       }
 
@@ -580,6 +635,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
         netControlOp,
         netControlName,
         preparedBy,
+        requireAck: false,
         dateTime,
         endTime: null,
         status: 'active',
