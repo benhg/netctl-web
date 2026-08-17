@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useNetStore } from '../stores/netStore';
+import { CallsignInput } from './CallsignInput';
 import type { Participant } from '../types';
 
 interface LogEntryFormProps {
@@ -8,7 +9,7 @@ interface LogEntryFormProps {
 }
 
 export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps) {
-  const { addLogEntry, participants, session } = useNetStore();
+  const { addLogEntry, session } = useNetStore();
   const [fromCallsign, setFromCallsign] = useState('');
   const [toCallsign, setToCallsign] = useState('NC');
   const [message, setMessage] = useState('');
@@ -58,25 +59,6 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
     return null;
   }
 
-  // Build datalist options with both callsigns and tactical calls
-  const callsignOptions: { value: string; label: string }[] = [];
-  const optionMap = new Map<string, string>();
-
-  optionMap.set('NC', 'NC (Net Control)');
-  optionMap.set('ALL', 'ALL (All Stations)');
-
-  for (const p of participants) {
-    optionMap.set(p.callsign, p.name ? `${p.callsign} - ${p.name}` : p.callsign);
-    if (p.tacticalCall) {
-      const label = `${p.tacticalCall} (${p.callsign})${p.name ? ` - ${p.name}` : ''}`;
-      optionMap.set(p.tacticalCall, label);
-    }
-  }
-
-  for (const [value, label] of optionMap.entries()) {
-    callsignOptions.push({ value, label });
-  }
-
   return (
     <form onSubmit={handleSubmit} className="panel shrink-0">
       <div className="mb-1.5 flex items-baseline justify-between gap-2">
@@ -85,28 +67,28 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
       </div>
       {/* From / To / message on one line; the message takes the slack. */}
       <div className="flex flex-wrap items-start gap-1.5">
-        <input
-          type="text"
-          value={fromCallsign}
-          onChange={(e) => setFromCallsign(e.target.value)}
-          onFocus={selectAllOnFocus}
-          placeholder="From"
-          aria-label="From callsign"
-          list="callsign-list"
-          autoComplete="off"
-          className="field log-data-face w-[8.5rem] font-semibold"
-        />
-        <input
-          type="text"
-          value={toCallsign}
-          onChange={(e) => setToCallsign(e.target.value)}
-          onFocus={selectAllOnFocus}
-          placeholder="To"
-          aria-label="To callsign"
-          list="callsign-list"
-          autoComplete="off"
-          className="field log-data-face w-[8.5rem] font-semibold"
-        />
+        <div className="w-[8.5rem]">
+          <CallsignInput
+            value={fromCallsign}
+            onChange={setFromCallsign}
+            onFocus={selectAllOnFocus}
+            placeholder="From"
+            ariaLabel="From callsign"
+            includeSpecial
+            className="field log-data-face font-semibold"
+          />
+        </div>
+        <div className="w-[8.5rem]">
+          <CallsignInput
+            value={toCallsign}
+            onChange={setToCallsign}
+            onFocus={selectAllOnFocus}
+            placeholder="To"
+            ariaLabel="To callsign"
+            includeSpecial
+            className="field log-data-face font-semibold"
+          />
+        </div>
         <textarea
           ref={messageRef}
           value={message}
@@ -134,11 +116,6 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
           </button>
         )}
       </div>
-      <datalist id="callsign-list">
-        {callsignOptions.map((opt) => (
-          <option key={opt.value} value={opt.value} label={opt.label} />
-        ))}
-      </datalist>
     </form>
   );
 }

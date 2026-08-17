@@ -8,10 +8,13 @@ import { CommunicationLog } from './components/CommunicationLog';
 import { ICS309Preview } from './components/ICS309Preview';
 import { ExportButtons } from './components/ExportButtons';
 import { useNetStore } from './stores/netStore';
+import { useIsMobile } from './hooks/useIsMobile';
+import { MobileApp } from './components/mobile/MobileApp';
 import type { Participant } from './types';
 
 function App() {
   const { session, reset } = useNetStore();
+  const isMobile = useIsMobile();
   const [selectedParticipant, setSelectedParticipant] = useState<Participant | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [zoom, setZoom] = useState(1);
@@ -38,6 +41,13 @@ function App() {
   }, []);
 
   const supportsZoom = typeof CSS !== 'undefined' && CSS.supports?.('zoom', '1');
+
+  // Phone widths get their own layout: separate check-in and traffic screens
+  // rather than a desktop grid squeezed into one column. Same store, same
+  // session — only the presentation differs.
+  if (isMobile) {
+    return <MobileApp />;
+  }
 
   return (
     <div
