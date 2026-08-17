@@ -233,7 +233,12 @@ export function MobileCheckIn() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => updateParticipant(p.id, { hasTraffic: !p.hasTraffic })}
+                  onClick={() =>
+                    updateParticipant(p.id, {
+                      hasTraffic: !p.hasTraffic,
+                      trafficNote: p.hasTraffic ? '' : p.trafficNote,
+                    })
+                  }
                   aria-pressed={p.hasTraffic ?? false}
                   className={`min-h-11 shrink-0 rounded border px-2.5 text-xs font-semibold ${
                     p.hasTraffic

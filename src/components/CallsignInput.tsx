@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useNetStore } from '../stores/netStore';
 
 export type CallsignOption = {
@@ -46,6 +46,9 @@ export function CallsignInput({
   const [isOpen, setIsOpen] = useState(false);
   const [highlight, setHighlight] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  // Per instance: From and To are both comboboxes, so a fixed id would make
+  // each one's aria-controls point at the other's list.
+  const listboxId = `callsign-autocomplete-${useId()}`;
 
   const options = useMemo<CallsignOption[]>(() => {
     const fromParticipants = participants.map((p) => ({
@@ -128,7 +131,7 @@ export function CallsignInput({
         role="combobox"
         aria-expanded={showMenu}
         aria-autocomplete="list"
-        aria-controls="callsign-autocomplete"
+        aria-controls={listboxId}
         aria-label={ariaLabel}
         autoComplete="off"
         value={value}
@@ -147,7 +150,7 @@ export function CallsignInput({
       />
       {showMenu && (
         <ul
-          id="callsign-autocomplete"
+          id={listboxId}
           role="listbox"
           className="absolute z-20 mt-0.5 max-h-56 w-full min-w-56 overflow-y-auto rounded border border-slate-600 bg-slate-900 py-0.5 shadow-lg shadow-black/40"
         >

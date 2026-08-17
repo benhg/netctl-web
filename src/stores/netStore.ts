@@ -294,7 +294,10 @@ export const useNetStore = create<NetStore>((set, get) => ({
       logEntries: [],
       lastAcknowledgedEntryId: null,
       startTime: null,
-      error: null
+      error: null,
+      // Drafts belong to the net being run; never carry text into the next one.
+      checkInDraft: EMPTY_CHECK_IN_DRAFT,
+      logDraft: EMPTY_LOG_DRAFT,
     });
 
     saveSessionData({
@@ -345,6 +348,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
       lastAcknowledgedEntryId: data.lastAcknowledgedEntryId ?? null,
       startTime: normalizedSession.status === 'active' ? new Date(normalizedSession.dateTime).getTime() : null,
       isLoading: false,
+      checkInDraft: EMPTY_CHECK_IN_DRAFT,
+      logDraft: EMPTY_LOG_DRAFT,
     });
     setActiveSessionId(normalizedSession.id);
   },
@@ -751,6 +756,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
         startTime: Number.isNaN(startTimeValue) ? null : startTimeValue,
         isLoading: false,
         error: null,
+        checkInDraft: EMPTY_CHECK_IN_DRAFT,
+        logDraft: EMPTY_LOG_DRAFT,
       });
 
       saveSessionData({
@@ -949,6 +956,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
       isLoading: false,
       error: null,
       startTime: null,
+      checkInDraft: EMPTY_CHECK_IN_DRAFT,
+      logDraft: EMPTY_LOG_DRAFT,
     });
   },
 }));

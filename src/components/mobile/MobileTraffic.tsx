@@ -168,7 +168,12 @@ export function MobileTraffic() {
             <button
               key={p.id}
               type="button"
-              onClick={() => updateParticipant(p.id, { hasTraffic: !p.hasTraffic })}
+              onClick={() =>
+                updateParticipant(p.id, {
+                  hasTraffic: !p.hasTraffic,
+                  trafficNote: p.hasTraffic ? '' : p.trafficNote,
+                })
+              }
               aria-pressed={p.hasTraffic ?? false}
               className={`log-data-face min-h-9 rounded border px-2 text-sm font-semibold ${
                 p.hasTraffic
