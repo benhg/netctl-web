@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useNetStore } from '../../stores/netStore';
 import { trafficQueueOf } from '../../lib/traffic';
 import { CallsignInput } from '../CallsignInput';
@@ -21,6 +22,7 @@ export function MobileTraffic() {
   const { fromCallsign, toCallsign, message } = logDraft;
   const setFromCallsign = (value: string) => patchLogDraft({ fromCallsign: value });
   const setToCallsign = (value: string) => patchLogDraft({ toCallsign: value });
+  const messageRef = useRef<HTMLTextAreaElement>(null);
 
   const isActive = session?.status === 'active';
   const queue = trafficQueueOf(participants);
@@ -78,6 +80,7 @@ export function MobileTraffic() {
           </div>
         </div>
         <textarea
+          ref={messageRef}
           value={message}
           onChange={(e) => patchLogDraft({ message: e.target.value })}
           placeholder="Traffic or remarks..."
@@ -95,51 +98,57 @@ export function MobileTraffic() {
       </form>
 
       <section className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
-        <h2 className="mb-1.5 text-sm font-semibold text-amber-100">
-          Traffic Queue <span className="font-normal text-amber-200/70">{queue.length}</span>
-        </h2>
+        <div className="mb-1.5 flex items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-amber-100">
+            Traffic Queue <span className="font-normal text-amber-200/70">{queue.length}</span>
+          </h2>
+          {queue.length > 0 && <span className="text-[11px] text-amber-200/60">tap to log</span>}
+        </div>
         {queue.length === 0 ? (
           <p className="text-xs text-amber-200/70">
             No traffic waiting. Flag a station here or on the check-in screen.
           </p>
         ) : (
-          <ul className="space-y-1.5">
+          /* Caps at roughly four stations and scrolls, so a long queue does not
+             push the logging form off the screen. */
+          <ul className="max-h-52 space-y-1 overflow-y-auto">
             {queue.map((p, index) => (
-              <li key={p.id} className="flex items-center gap-2 rounded bg-slate-900/50 p-1.5">
-                <span className="shrink-0 rounded bg-amber-500/25 px-1.5 text-[11px] font-semibold text-amber-100">
-                  {index + 1}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5">
-                    {p.tacticalCall && (
-                      <span className="shrink-0 text-sm font-semibold text-yellow-400">
-                        {p.tacticalCall}
-                      </span>
-                    )}
-                    <span className="log-data-face text-sm font-semibold text-blue-400">
-                      {p.callsign}
-                    </span>
-                    {p.name && <span className="truncate text-xs text-slate-300">{p.name}</span>}
-                  </div>
-                  {p.trafficNote && (
-                    <p className="truncate text-xs text-amber-200">{p.trafficNote}</p>
-                  )}
-                </div>
+              <li key={p.id} className="flex items-stretch gap-1 rounded bg-slate-900/50">
+                {/* The row is the tap target — no separate Log button. */}
                 <button
                   type="button"
                   onClick={() => {
-                    // Pre-fill the form for this station instead of retyping it.
                     setFromCallsign(p.tacticalCall || p.callsign);
                     setToCallsign('NC');
+                    messageRef.current?.focus();
                   }}
-                  className="min-h-11 shrink-0 rounded border border-slate-600 px-2.5 text-xs text-slate-200"
+                  aria-label={`Log traffic from ${p.callsign}`}
+                  className="flex min-h-10 min-w-0 flex-1 items-center gap-1.5 rounded-l px-1.5 text-left"
                 >
-                  Log
+                  <span className="shrink-0 rounded bg-amber-500/25 px-1.5 text-[11px] font-semibold text-amber-100">
+                    {index + 1}
+                  </span>
+                  {p.tacticalCall && (
+                    <span className="shrink-0 text-sm font-semibold text-yellow-400">
+                      {p.tacticalCall}
+                    </span>
+                  )}
+                  <span className="log-data-face shrink-0 text-sm font-semibold text-blue-400">
+                    {p.callsign}
+                  </span>
+                  <span className="min-w-0 truncate text-xs text-slate-300">
+                    {p.trafficNote ? (
+                      <span className="text-amber-200">{p.trafficNote}</span>
+                    ) : (
+                      p.name
+                    )}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={() => updateParticipant(p.id, { hasTraffic: false, trafficNote: '' })}
-                  className="min-h-11 shrink-0 rounded bg-slate-700 px-2.5 text-xs font-semibold text-white"
+                  aria-label={`Clear traffic for ${p.callsign}`}
+                  className="min-h-10 shrink-0 rounded-r px-2.5 text-xs font-semibold text-slate-300"
                 >
                   Clear
                 </button>
