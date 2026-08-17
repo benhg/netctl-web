@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useRef, useEffect } from 'react';
 import { useNetStore } from '../stores/netStore';
 import { CallsignInput } from './CallsignInput';
 import type { Participant } from '../types';
@@ -9,10 +9,10 @@ interface LogEntryFormProps {
 }
 
 export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps) {
-  const { addLogEntry, session } = useNetStore();
-  const [fromCallsign, setFromCallsign] = useState('');
-  const [toCallsign, setToCallsign] = useState('NC');
-  const [message, setMessage] = useState('');
+  const { addLogEntry, session, logDraft, patchLogDraft, clearLogDraft } = useNetStore();
+  const { fromCallsign, toCallsign, message } = logDraft;
+  const setFromCallsign = (value: string) => patchLogDraft({ fromCallsign: value });
+  const setToCallsign = (value: string) => patchLogDraft({ toCallsign: value });
   const messageRef = useRef<HTMLTextAreaElement>(null);
 
   const selectAllOnFocus = (event: React.FocusEvent<HTMLInputElement>) => {
@@ -22,10 +22,14 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
   useEffect(() => {
     if (selectedParticipant) {
       // Use tactical call if available, otherwise use callsign
-      setFromCallsign(selectedParticipant.tacticalCall || selectedParticipant.callsign);
-      setToCallsign('NC');
+      patchLogDraft({
+        fromCallsign: selectedParticipant.tacticalCall || selectedParticipant.callsign,
+        toCallsign: 'NC',
+      });
       messageRef.current?.focus();
     }
+    // patchLogDraft is a stable store action; selection is the only trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedParticipant]);
 
   const submitEntry = () => {
@@ -41,9 +45,7 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
       { clearPendingTraffic: true }
     );
 
-    setFromCallsign('');
-    setToCallsign('NC');
-    setMessage('');
+    clearLogDraft();
     onClear();
   };
 
@@ -96,7 +98,7 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
         <textarea
           ref={messageRef}
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={(e) => patchLogDraft({ message: e.target.value })}
           onKeyDown={handleMessageKeyDown}
           placeholder="Traffic, announcements, or remarks..."
           // Two lines, then scroll: long traffic stays readable without the

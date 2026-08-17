@@ -244,7 +244,16 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
                   aria-label={`Callsign for pending station #${p.checkInNumber}`}
                   className="log-data-face w-[7.5rem] rounded border border-slate-600 bg-slate-900 px-1.5 py-0.5 text-sm font-semibold uppercase text-sky-200 focus:border-sky-400 focus:outline-none disabled:opacity-60"
                 />
-                <label className="flex items-center gap-1 text-xs text-slate-300">
+                {/* Shows the lookup result on a station that is still pending. */}
+                {(p.name || p.location) && (
+                  <span
+                    className="min-w-0 flex-1 truncate text-xs text-slate-400"
+                    title={[p.name, p.location].filter(Boolean).join(' · ')}
+                  >
+                    {[p.name, p.location].filter(Boolean).join(' · ')}
+                  </span>
+                )}
+                <label className="flex shrink-0 items-center gap-1 text-xs text-slate-300">
                   <input
                     type="checkbox"
                     checked={p.hasTraffic ?? false}

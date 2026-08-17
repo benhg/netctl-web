@@ -20,17 +20,36 @@ export function MobileCheckIn() {
     ackAllPending,
     setRequireAck,
     lookupCallsign,
+    checkInDraft,
+    patchCheckInDraft,
+    clearCheckInDraft,
   } = useNetStore();
-  const [callsign, setCallsign] = useState('');
-  const [tacticalCall, setTacticalCall] = useState('');
-  const [name, setName] = useState('');
-  const [location, setLocation] = useState('');
+  const { callsign, tacticalCall, name, location, hasTraffic } = checkInDraft;
   const [showDetails, setShowDetails] = useState(false);
+  const [isLookingUp, setIsLookingUp] = useState(false);
   const callsignRef = useRef<HTMLInputElement>(null);
 
   const isActive = session?.status === 'active';
   const pending = participants.filter((p) => !p.acked);
   const acked = [...participants].filter((p) => p.acked).reverse();
+
+  const formatLocation = (city: string, state: string) =>
+    [city, state].filter(Boolean).join(', ').trim();
+
+  /**
+   * Look up on blur, same as the desktop form. Without this the lookup only ran
+   * after check-in and filled fields that are collapsed, so it appeared not to
+   * work at all on a phone.
+   */
+  const handleCallsignBlur = async () => {
+    if (callsign.trim().length < 3 || name || location) return;
+    setIsLookingUp(true);
+    const result = await lookupCallsign(callsign);
+    if (result) {
+      patchCheckInDraft({ name: result.name, location: formatLocation(result.city, result.state) });
+    }
+    setIsLookingUp(false);
+  };
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -42,6 +61,8 @@ export function MobileCheckIn() {
       tacticalCall: tacticalCall.trim(),
       name: name.trim(),
       location: location.trim(),
+      hasTraffic,
+      initialTraffic: checkInDraft.note.trim(),
     });
 
     // Fill name and QTH from the lookup when it lands, without making the
@@ -51,16 +72,13 @@ export function MobileCheckIn() {
         if (!result) return;
         const updates: { name?: string; location?: string } = {};
         if (result.name) updates.name = result.name;
-        const nextLocation = [result.city, result.state].filter(Boolean).join(', ');
+        const nextLocation = formatLocation(result.city, result.state);
         if (nextLocation) updates.location = nextLocation;
         if (Object.keys(updates).length > 0) updateParticipant(id, updates);
       });
     }
 
-    setCallsign('');
-    setTacticalCall('');
-    setName('');
-    setLocation('');
+    clearCheckInDraft();
     setShowDetails(false);
     callsignRef.current?.focus();
   };
@@ -83,8 +101,9 @@ export function MobileCheckIn() {
             ref={callsignRef}
             type="text"
             value={callsign}
-            onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+            onChange={(e) => patchCheckInDraft({ callsign: e.target.value.toUpperCase() })}
             onFocus={selectAllOnFocus}
+            onBlur={handleCallsignBlur}
             placeholder="CALLSIGN"
             aria-label="Callsign"
             autoCapitalize="characters"
@@ -100,12 +119,26 @@ export function MobileCheckIn() {
             Check In
           </button>
         </div>
+        {/* Confirms the lookup landed while the detail fields stay collapsed. */}
+        {!showDetails && (isLookingUp || name || location) && (
+          <p className="mt-1.5 truncate text-xs text-slate-400">
+            {isLookingUp ? (
+              'Looking up…'
+            ) : (
+              <>
+                <span className="text-slate-200">{name}</span>
+                {name && location ? ' · ' : ''}
+                {location}
+              </>
+            )}
+          </p>
+        )}
         {showDetails && (
           <div className="mt-2 space-y-2">
             <input
               type="text"
               value={tacticalCall}
-              onChange={(e) => setTacticalCall(e.target.value)}
+              onChange={(e) => patchCheckInDraft({ tacticalCall: e.target.value })}
               onFocus={selectAllOnFocus}
               placeholder="Tactical call"
               aria-label="Tactical call"
@@ -114,7 +147,7 @@ export function MobileCheckIn() {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => patchCheckInDraft({ name: e.target.value })}
               onFocus={selectAllOnFocus}
               placeholder="Name"
               aria-label="Name"
@@ -123,7 +156,7 @@ export function MobileCheckIn() {
             <input
               type="text"
               value={location}
-              onChange={(e) => setLocation(e.target.value)}
+              onChange={(e) => patchCheckInDraft({ location: e.target.value })}
               onFocus={selectAllOnFocus}
               placeholder="Location/QTH"
               aria-label="Location or QTH"
@@ -139,15 +172,26 @@ export function MobileCheckIn() {
           >
             {showDetails ? '− Fewer fields' : '+ Tactical, name, QTH'}
           </button>
-          <label className="flex min-h-8 items-center gap-1.5 text-xs text-slate-300">
-            <input
-              type="checkbox"
-              checked={session?.requireAck ?? false}
-              onChange={(e) => setRequireAck(e.target.checked)}
-              className="h-5 w-5 rounded border-slate-500 bg-slate-900 text-sky-500"
-            />
-            Require ACK
-          </label>
+          <div className="flex items-center gap-3">
+            <label className="flex min-h-8 items-center gap-1.5 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={hasTraffic}
+                onChange={(e) => patchCheckInDraft({ hasTraffic: e.target.checked })}
+                className="h-5 w-5 rounded border-slate-500 bg-slate-900 text-amber-500"
+              />
+              Traffic
+            </label>
+            <label className="flex min-h-8 items-center gap-1.5 text-xs text-slate-300">
+              <input
+                type="checkbox"
+                checked={session?.requireAck ?? false}
+                onChange={(e) => setRequireAck(e.target.checked)}
+                className="h-5 w-5 rounded border-slate-500 bg-slate-900 text-sky-500"
+              />
+              Require ACK
+            </label>
+          </div>
         </div>
       </form>
 
@@ -166,17 +210,27 @@ export function MobileCheckIn() {
           <ul className="space-y-1.5">
             {[...pending].reverse().map((p) => (
               <li key={p.id} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={p.callsign}
-                  onChange={(e) => updateParticipant(p.id, { callsign: e.target.value.toUpperCase() })}
-                  onFocus={selectAllOnFocus}
-                  aria-label={`Callsign for pending station ${p.checkInNumber}`}
-                  autoCapitalize="characters"
-                  autoCorrect="off"
-                  spellCheck={false}
-                  className="field-touch log-data-face min-w-0 flex-1 font-semibold uppercase text-sky-200"
-                />
+                <div className="min-w-0 flex-1">
+                  <input
+                    type="text"
+                    value={p.callsign}
+                    onChange={(e) =>
+                      updateParticipant(p.id, { callsign: e.target.value.toUpperCase() })
+                    }
+                    onFocus={selectAllOnFocus}
+                    aria-label={`Callsign for pending station ${p.checkInNumber}`}
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
+                    className="field-touch log-data-face font-semibold uppercase text-sky-200"
+                  />
+                  {/* Shows the lookup result on a station that is still pending. */}
+                  {(p.name || p.location) && (
+                    <p className="mt-0.5 truncate text-[11px] text-slate-400">
+                      {[p.name, p.location].filter(Boolean).join(' · ')}
+                    </p>
+                  )}
+                </div>
                 <button
                   type="button"
                   onClick={() => updateParticipant(p.id, { hasTraffic: !p.hasTraffic })}

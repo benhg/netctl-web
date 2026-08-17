@@ -2,13 +2,16 @@ import { useState, useRef, useEffect } from 'react';
 import { useNetStore } from '../stores/netStore';
 
 export function CheckInForm() {
-  const { addParticipant, lookupCallsign, updateParticipant, session } = useNetStore();
-  const [callsign, setCallsign] = useState('');
-  const [tacticalCall, setTacticalCall] = useState('');
-  const [name, setName] = useState('');
-  const [location, setLocation] = useState('');
-  const [hasTraffic, setHasTraffic] = useState(false);
-  const [initialTraffic, setInitialTraffic] = useState('');
+  const {
+    addParticipant,
+    lookupCallsign,
+    updateParticipant,
+    session,
+    checkInDraft,
+    patchCheckInDraft,
+    clearCheckInDraft,
+  } = useNetStore();
+  const { callsign, tacticalCall, name, location, hasTraffic, note } = checkInDraft;
   const [noteOpen, setNoteOpen] = useState(false);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const callsignRef = useRef<HTMLInputElement>(null);
@@ -29,8 +32,10 @@ export function CheckInForm() {
       setIsLookingUp(true);
       const result = await lookupCallsign(callsign);
       if (result) {
-        setName(result.name);
-        setLocation(`${result.city}, ${result.state}`);
+        patchCheckInDraft({
+          name: result.name,
+          location: formatLookupLocation(result.city, result.state),
+        });
       }
       setIsLookingUp(false);
     }
@@ -66,7 +71,7 @@ export function CheckInForm() {
       name: trimmedName || lookupResult?.name || '',
       location: trimmedLocation || resolvedLocation,
       hasTraffic,
-      initialTraffic: initialTraffic.trim(),
+      initialTraffic: note.trim(),
     });
 
     if (lookupPromise) {
@@ -91,12 +96,7 @@ export function CheckInForm() {
       });
     }
 
-    setCallsign('');
-    setTacticalCall('');
-    setName('');
-    setLocation('');
-    setHasTraffic(false);
-    setInitialTraffic('');
+    clearCheckInDraft();
     setNoteOpen(false);
     callsignRef.current?.focus();
   };
@@ -118,7 +118,7 @@ export function CheckInForm() {
 
   // The note field costs a permanent block of height for something most
   // check-ins never use, so it is revealed on demand or when traffic is flagged.
-  const showNote = hasTraffic || noteOpen || initialTraffic.trim().length > 0;
+  const showNote = hasTraffic || noteOpen || note.trim().length > 0;
 
   return (
     <form onSubmit={handleSubmit} className="panel shrink-0">
@@ -132,7 +132,7 @@ export function CheckInForm() {
           ref={callsignRef}
           type="text"
           value={callsign}
-          onChange={(e) => setCallsign(e.target.value.toUpperCase())}
+          onChange={(e) => patchCheckInDraft({ callsign: e.target.value.toUpperCase() })}
           onFocus={selectAllOnFocus}
           onBlur={handleCallsignBlur}
           placeholder="Callsign *"
@@ -143,7 +143,7 @@ export function CheckInForm() {
         <input
           type="text"
           value={tacticalCall}
-          onChange={(e) => setTacticalCall(e.target.value)}
+          onChange={(e) => patchCheckInDraft({ tacticalCall: e.target.value })}
           onFocus={selectAllOnFocus}
           placeholder="Tactical"
           aria-label="Tactical call"
@@ -152,7 +152,7 @@ export function CheckInForm() {
         <input
           type="text"
           value={name}
-          onChange={(e) => setName(e.target.value)}
+          onChange={(e) => patchCheckInDraft({ name: e.target.value })}
           onFocus={selectAllOnFocus}
           placeholder="Name"
           aria-label="Name"
@@ -161,7 +161,7 @@ export function CheckInForm() {
         <input
           type="text"
           value={location}
-          onChange={(e) => setLocation(e.target.value)}
+          onChange={(e) => patchCheckInDraft({ location: e.target.value })}
           onFocus={selectAllOnFocus}
           placeholder="Location/QTH"
           aria-label="Location or QTH"
@@ -170,8 +170,8 @@ export function CheckInForm() {
       </div>
       {showNote && (
         <textarea
-          value={initialTraffic}
-          onChange={(e) => setInitialTraffic(e.target.value)}
+          value={note}
+          onChange={(e) => patchCheckInDraft({ note: e.target.value })}
           placeholder={
             hasTraffic ? 'Note about the pending traffic...' : 'Remarks for the check-in log...'
           }
@@ -192,7 +192,7 @@ export function CheckInForm() {
           <input
             type="checkbox"
             checked={hasTraffic}
-            onChange={(e) => setHasTraffic(e.target.checked)}
+            onChange={(e) => patchCheckInDraft({ hasTraffic: e.target.checked })}
             className="h-4 w-4 rounded border-slate-500 bg-slate-900 text-amber-500 focus:ring-amber-500"
           />
           Traffic

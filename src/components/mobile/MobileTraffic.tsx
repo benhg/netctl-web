@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import { useNetStore } from '../../stores/netStore';
 import { trafficQueueOf } from '../../lib/traffic';
 import { CallsignInput } from '../CallsignInput';
@@ -8,10 +7,20 @@ import { CallsignInput } from '../CallsignInput';
  * without leaving the screen or scrolling past the roster.
  */
 export function MobileTraffic() {
-  const { session, participants, logEntries, addLogEntry, updateParticipant } = useNetStore();
-  const [fromCallsign, setFromCallsign] = useState('');
-  const [toCallsign, setToCallsign] = useState('NC');
-  const [message, setMessage] = useState('');
+  const {
+    session,
+    participants,
+    logEntries,
+    addLogEntry,
+    updateParticipant,
+    logDraft,
+    patchLogDraft,
+    clearLogDraft,
+  } = useNetStore();
+  // Shared with the desktop log form, so switching layouts keeps the draft.
+  const { fromCallsign, toCallsign, message } = logDraft;
+  const setFromCallsign = (value: string) => patchLogDraft({ fromCallsign: value });
+  const setToCallsign = (value: string) => patchLogDraft({ toCallsign: value });
 
   const isActive = session?.status === 'active';
   const queue = trafficQueueOf(participants);
@@ -27,9 +36,7 @@ export function MobileTraffic() {
       },
       { clearPendingTraffic: true }
     );
-    setFromCallsign('');
-    setToCallsign('NC');
-    setMessage('');
+    clearLogDraft();
   };
 
   if (!isActive) {
@@ -72,7 +79,7 @@ export function MobileTraffic() {
         </div>
         <textarea
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={(e) => patchLogDraft({ message: e.target.value })}
           placeholder="Traffic or remarks..."
           rows={2}
           aria-label="Traffic or remarks"

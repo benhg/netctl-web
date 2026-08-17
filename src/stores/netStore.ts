@@ -128,6 +128,38 @@ const writeCallsignCache = (cache: Record<string, CallsignCacheEntry>) => {
   writeJson(STORAGE_KEYS.callsignCache, cache);
 };
 
+/**
+ * In-progress form text. It lives in the store rather than in each form's local
+ * state so the desktop and mobile layouts share one draft: crossing the mobile
+ * breakpoint mid-entry swaps the layout, and half-typed text must survive that.
+ * Deliberately not persisted — a localStorage write per keystroke is not worth it.
+ */
+export type CheckInDraft = {
+  callsign: string;
+  tacticalCall: string;
+  name: string;
+  location: string;
+  hasTraffic: boolean;
+  note: string;
+};
+
+export type LogDraft = {
+  fromCallsign: string;
+  toCallsign: string;
+  message: string;
+};
+
+const EMPTY_CHECK_IN_DRAFT: CheckInDraft = {
+  callsign: '',
+  tacticalCall: '',
+  name: '',
+  location: '',
+  hasTraffic: false,
+  note: '',
+};
+
+const EMPTY_LOG_DRAFT: LogDraft = { fromCallsign: '', toCallsign: 'NC', message: '' };
+
 interface NetStore {
   session: NetSession | null;
   participants: Participant[];
@@ -136,6 +168,14 @@ interface NetStore {
   isLoading: boolean;
   error: string | null;
   startTime: number | null;
+  checkInDraft: CheckInDraft;
+  logDraft: LogDraft;
+
+  // Draft actions
+  patchCheckInDraft: (patch: Partial<CheckInDraft>) => void;
+  clearCheckInDraft: () => void;
+  patchLogDraft: (patch: Partial<LogDraft>) => void;
+  clearLogDraft: () => void;
 
   // Session actions
   createSession: (session: Omit<NetSession, 'id' | 'status' | 'dateTime' | 'endTime'>) => void;
@@ -210,6 +250,24 @@ export const useNetStore = create<NetStore>((set, get) => ({
     }
     return null;
   })(),
+  checkInDraft: EMPTY_CHECK_IN_DRAFT,
+  logDraft: EMPTY_LOG_DRAFT,
+
+  patchCheckInDraft: (patch) => {
+    set({ checkInDraft: { ...get().checkInDraft, ...patch } });
+  },
+
+  clearCheckInDraft: () => {
+    set({ checkInDraft: EMPTY_CHECK_IN_DRAFT });
+  },
+
+  patchLogDraft: (patch) => {
+    set({ logDraft: { ...get().logDraft, ...patch } });
+  },
+
+  clearLogDraft: () => {
+    set({ logDraft: EMPTY_LOG_DRAFT });
+  },
 
   createSession: (sessionData) => {
     const session: NetSession = {
