@@ -88,6 +88,11 @@ const normalizeParticipant = (participant: Participant): Participant => ({
   location: participant.location ?? '',
   hasTraffic: participant.hasTraffic ?? false,
   trafficNote: participant.trafficNote ?? '',
+  // Rows flagged before trafficSince existed fall back to their check-in time,
+  // so an older session's queue keeps a stable order.
+  trafficSince: participant.hasTraffic
+    ? (participant.trafficSince ?? participant.checkInTime)
+    : undefined,
   // Sessions stored before ACK mode existed have no pending stations.
   acked: participant.acked ?? true,
 });
@@ -156,7 +161,17 @@ interface NetStore {
   ackAllPending: () => void;
 
   // Log entry actions
-  addLogEntry: (entry: Omit<LogEntry, 'id' | 'entryNumber' | 'time'>) => void;
+  addLogEntry: (
+    entry: Omit<LogEntry, 'id' | 'entryNumber' | 'time'>,
+    options?: {
+      /**
+       * Clear the pending-traffic flag of the sending station. Opt-in, because
+       * addParticipant logs its own "check in - traffic pending" entry and must
+       * not wipe the flag it just raised.
+       */
+      clearPendingTraffic?: boolean;
+    }
+  ) => void;
   setLastAcknowledgedEntry: (id: string) => void;
 
   // Callsign lookup
@@ -298,6 +313,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
       checkInNumber: nextCheckInNumber(participants),
       hasTraffic: participantData.hasTraffic ?? false,
       trafficNote: participantData.initialTraffic?.trim() ?? '',
+      trafficSince: participantData.hasTraffic ? new Date().toISOString() : undefined,
       acked: !session?.requireAck,
     };
     const newParticipants = [...participants, participant];
@@ -335,6 +351,9 @@ export const useNetStore = create<NetStore>((set, get) => ({
     const current = participants.find((p) => p.id === id);
     if (!current) return;
 
+    const wasFlagged = current.hasTraffic ?? false;
+    const isFlagged = updates.hasTraffic ?? wasFlagged;
+
     const nextParticipant: Participant = {
       ...current,
       ...updates,
@@ -342,8 +361,15 @@ export const useNetStore = create<NetStore>((set, get) => ({
       tacticalCall: (updates.tacticalCall ?? current.tacticalCall).trim(),
       name: (updates.name ?? current.name).trim(),
       location: (updates.location ?? current.location).trim(),
-      hasTraffic: updates.hasTraffic ?? current.hasTraffic ?? false,
+      hasTraffic: isFlagged,
       trafficNote: (updates.trafficNote ?? current.trafficNote ?? '').trim(),
+      // Stamp when traffic is raised and hold that time while it stays raised,
+      // so editing a station's name does not send it to the back of the queue.
+      trafficSince: isFlagged
+        ? wasFlagged
+          ? (current.trafficSince ?? new Date().toISOString())
+          : new Date().toISOString()
+        : undefined,
     };
 
     const updatedParticipants = participants.map((p) => (p.id === id ? nextParticipant : p));
@@ -436,8 +462,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
     return callsign;
   },
 
-  addLogEntry: (entryData) => {
-    const { logEntries, session } = get();
+  addLogEntry: (entryData, options) => {
+    const { logEntries, session, participants, lastAcknowledgedEntryId } = get();
     const entry: LogEntry = {
       id: uuidv4(),
       ...entryData,
@@ -445,14 +471,31 @@ export const useNetStore = create<NetStore>((set, get) => ({
       entryNumber: logEntries.length + 1,
     };
     const newEntries = [...logEntries, entry];
-    set({ logEntries: newEntries });
+
+    // Logging traffic from a station is the act of clearing it, so the operator
+    // does not have to remember to untick the box afterwards.
+    let nextParticipants = participants;
+    if (options?.clearPendingTraffic) {
+      const sender = entry.fromCallsign.trim().toUpperCase();
+      if (sender) {
+        nextParticipants = participants.map((p) => {
+          if (!p.hasTraffic) return p;
+          const matches =
+            p.callsign.toUpperCase() === sender ||
+            (p.tacticalCall ? p.tacticalCall.toUpperCase() === sender : false);
+          return matches ? { ...p, hasTraffic: false, trafficNote: '', trafficSince: undefined } : p;
+        });
+      }
+    }
+
+    set({ logEntries: newEntries, participants: nextParticipants });
 
     if (session) {
       saveSessionData({
         session,
-        participants: get().participants,
+        participants: nextParticipants,
         logEntries: newEntries,
-        lastAcknowledgedEntryId: get().lastAcknowledgedEntryId,
+        lastAcknowledgedEntryId,
       });
     }
   },

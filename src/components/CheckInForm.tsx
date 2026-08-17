@@ -175,9 +175,9 @@ export function CheckInForm() {
           placeholder={
             hasTraffic ? 'Note about the pending traffic...' : 'Remarks for the check-in log...'
           }
-          rows={1}
+          rows={2}
           aria-label="Initial traffic or remarks"
-          className="field mt-1.5 resize-none"
+          className="field mt-1.5 resize-none overflow-y-auto"
         />
       )}
       <div className="mt-1.5 flex items-center gap-3">

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNetStore } from '../stores/netStore';
+import { trafficQueueOf } from '../lib/traffic';
 import type { Participant } from '../types';
 
 interface ParticipantListProps {
@@ -106,10 +107,8 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
   }
 
   const isActive = session?.status === 'active';
-  const trafficQueue = participants
-    .filter((participant) => participant.hasTraffic)
-    .sort((a, b) => a.checkInNumber - b.checkInNumber);
-  const nextTraffic = trafficQueue[0] ?? null;
+  // Called in the order stations raised traffic, not the order they checked in.
+  const trafficQueue = trafficQueueOf(participants);
   const pendingCount = participants.filter((p) => !p.acked).length;
   // Newest check-in first, so stations still calling in are at the top.
   const orderedParticipants = [...participants].reverse();
@@ -147,48 +146,65 @@ export function ParticipantList({ onSelectParticipant }: ParticipantListProps) {
         </div>
       </div>
       {/*
-       * Always present, empty or not. It holds one line either way, so the rows
-       * below never shift under the pointer when traffic arrives or clears, and
-       * "no traffic waiting" is itself worth stating during a net.
+       * Always present, empty or not, so the rows below do not shift under the
+       * pointer when traffic arrives or clears. The station list holds about two
+       * lines and scrolls past that, rather than growing out of the panel when a
+       * lot of stations are waiting.
        */}
       <div
-        className={`mb-1.5 flex items-center gap-2 rounded border px-2 py-1 ${
+        className={`mb-1.5 rounded border px-2 py-1 ${
           trafficQueue.length > 0
             ? 'border-amber-500/30 bg-amber-500/10'
             : 'border-slate-700 bg-slate-900/40'
         }`}
       >
-        <span
-          className={`shrink-0 text-[10px] font-semibold uppercase tracking-wide ${
-            trafficQueue.length > 0 ? 'text-amber-300' : 'text-slate-500'
-          }`}
-        >
-          Traffic
-        </span>
-        {trafficQueue.length > 0 ? (
-          <>
-            <span className="shrink-0 text-xs font-semibold text-white">
-              {nextTraffic?.tacticalCall || nextTraffic?.callsign}
-            </span>
-            <span className="min-w-0 flex-1 truncate text-xs text-amber-100/80">
-              {trafficQueue
-                .slice(1)
-                .map((p) => p.tacticalCall || p.callsign)
-                .join(' · ')}
-            </span>
-          </>
+        <div className="flex items-center justify-between gap-2">
+          <span
+            className={`text-[10px] font-semibold uppercase tracking-wide ${
+              trafficQueue.length > 0 ? 'text-amber-300' : 'text-slate-500'
+            }`}
+          >
+            Traffic{trafficQueue.length > 0 && ' — click to log'}
+          </span>
+          <span
+            className={`shrink-0 rounded-full px-1.5 text-[11px] font-semibold ${
+              trafficQueue.length > 0
+                ? 'bg-amber-500/20 text-amber-200'
+                : 'bg-slate-700/50 text-slate-400'
+            }`}
+          >
+            {trafficQueue.length}
+          </span>
+        </div>
+        {trafficQueue.length === 0 ? (
+          <p className="text-xs text-slate-500">No traffic waiting</p>
         ) : (
-          <span className="min-w-0 flex-1 text-xs text-slate-500">No traffic waiting</span>
+          <div className="max-h-[3.5rem] overflow-y-auto">
+            <div className="flex flex-wrap gap-1">
+              {trafficQueue.map((participant, index) => (
+                <button
+                  key={participant.id}
+                  type="button"
+                  onClick={() => onSelectParticipant(participant)}
+                  disabled={!isActive}
+                  title={
+                    participant.trafficNote
+                      ? `${participant.callsign}: ${participant.trafficNote}`
+                      : `Log traffic from ${participant.callsign}`
+                  }
+                  className={`log-data-face flex min-h-6 items-center gap-1 rounded px-1.5 text-xs font-semibold transition-colors disabled:cursor-not-allowed ${
+                    index === 0
+                      ? 'bg-amber-500/25 text-amber-50 hover:bg-amber-500/40'
+                      : 'bg-slate-900/70 text-amber-100 hover:bg-slate-700'
+                  }`}
+                >
+                  <span className="text-[10px] font-normal text-amber-300/80">{index + 1}</span>
+                  {participant.tacticalCall || participant.callsign}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
-        <span
-          className={`shrink-0 rounded-full px-1.5 text-[11px] font-semibold ${
-            trafficQueue.length > 0
-              ? 'bg-amber-500/20 text-amber-200'
-              : 'bg-slate-700/50 text-slate-400'
-          }`}
-        >
-          {trafficQueue.length}
-        </span>
       </div>
       <div className="flex-1 min-h-0 space-y-1 overflow-y-auto">
         {orderedParticipants.map((p) => {

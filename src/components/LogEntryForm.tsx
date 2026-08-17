@@ -31,11 +31,15 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
   const submitEntry = () => {
     if (!fromCallsign.trim()) return;
 
-    addLogEntry({
-      fromCallsign: fromCallsign.trim(),
-      toCallsign: toCallsign.trim() || 'NC',
-      message: message.trim(),
-    });
+    addLogEntry(
+      {
+        fromCallsign: fromCallsign.trim(),
+        toCallsign: toCallsign.trim() || 'NC',
+        message: message.trim(),
+      },
+      // Logging what a station had to pass is what clears its traffic flag.
+      { clearPendingTraffic: true }
+    );
 
     setFromCallsign('');
     setToCallsign('NC');
@@ -95,9 +99,11 @@ export function LogEntryForm({ selectedParticipant, onClear }: LogEntryFormProps
           onChange={(e) => setMessage(e.target.value)}
           onKeyDown={handleMessageKeyDown}
           placeholder="Traffic, announcements, or remarks..."
-          rows={1}
+          // Two lines, then scroll: long traffic stays readable without the
+          // field growing and pushing the log down mid-entry.
+          rows={2}
           aria-label="Message or remarks"
-          className="field min-w-0 flex-1 basis-64 resize-none"
+          className="field min-w-0 flex-1 basis-64 resize-none overflow-y-auto"
         />
         <button
           type="submit"

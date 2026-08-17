@@ -22,6 +22,11 @@ export interface Participant {
   checkInNumber: number;
   hasTraffic?: boolean;
   trafficNote?: string;
+  /**
+   * When traffic was flagged, so the queue is called in the order stations
+   * raised it rather than the order they checked in.
+   */
+  trafficSince?: string;
   /** False while the station is waiting for a net control acknowledgement. */
   acked?: boolean;
 }

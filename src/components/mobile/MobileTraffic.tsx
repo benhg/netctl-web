@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNetStore } from '../../stores/netStore';
+import { trafficQueueOf } from '../../lib/traffic';
 import { CallsignInput } from '../CallsignInput';
 
 /**
@@ -13,18 +14,19 @@ export function MobileTraffic() {
   const [message, setMessage] = useState('');
 
   const isActive = session?.status === 'active';
-  const queue = participants
-    .filter((p) => p.hasTraffic)
-    .sort((a, b) => a.checkInNumber - b.checkInNumber);
+  const queue = trafficQueueOf(participants);
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!fromCallsign.trim()) return;
-    addLogEntry({
-      fromCallsign: fromCallsign.trim(),
-      toCallsign: toCallsign.trim() || 'NC',
-      message: message.trim(),
-    });
+    addLogEntry(
+      {
+        fromCallsign: fromCallsign.trim(),
+        toCallsign: toCallsign.trim() || 'NC',
+        message: message.trim(),
+      },
+      { clearPendingTraffic: true }
+    );
     setFromCallsign('');
     setToCallsign('NC');
     setMessage('');
