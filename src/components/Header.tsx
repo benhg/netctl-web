@@ -38,103 +38,110 @@ export function Header() {
     event.target.value = '';
   };
 
+  const clock = (
+    <span className="log-data-face whitespace-nowrap text-xs text-slate-300">
+      {currentTime.toLocaleTimeString([], { hour12: false })}
+      <span className="mx-1 text-slate-500">/</span>
+      {currentTime.toISOString().slice(11, 19)}Z
+    </span>
+  );
+
   if (!session) {
     return (
-      <header className="bg-slate-800 text-white p-4 border-b border-slate-700">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-2xl font-bold">Net Control</h1>
-            <p className="text-slate-400 text-sm">Create a new session to get started</p>
-            <div className="mt-3">
-              <button
-                onClick={handleImportClick}
-                className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-white text-sm rounded transition-colors"
-              >
-                Import CSV
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".csv,text/csv"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-            </div>
-            {error && (
-              <div className="mt-3 max-w-xl rounded border border-red-500/40 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-                {error}
-              </div>
-            )}
+      <header className="shrink-0 border-b border-slate-700 bg-slate-800 px-3 py-2 text-white">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-baseline gap-3">
+            <h1 className="text-lg font-bold leading-tight">Net Control</h1>
+            <p className="text-xs text-slate-400">Create a new session to get started</p>
           </div>
-          <div className="text-sm font-mono text-slate-300">
-            <span>{currentTime.toLocaleTimeString()} Local</span>
-            <span className="mx-2">|</span>
-            <span>{currentTime.toISOString().slice(11, 19)}Z</span>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleImportClick}
+              className="rounded bg-slate-700 px-2.5 py-1 text-xs text-white transition-colors hover:bg-slate-600"
+            >
+              Import CSV
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".csv,text/csv"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            {clock}
           </div>
         </div>
+        {error && (
+          <div className="mt-2 rounded border border-red-500/40 bg-red-950/40 px-2 py-1 text-xs text-red-200">
+            {error}
+          </div>
+        )}
       </header>
     );
   }
 
   return (
-    <header className="bg-slate-800 text-white p-4 border-b border-slate-700">
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-2xl font-bold">{session.name}</h1>
-          <div className="flex gap-4 text-sm text-slate-300 mt-1">
-            <span>{session.frequency}</span>
-            <span>|</span>
-            <span>NCS: {session.netControlOp} ({session.netControlName})</span>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="flex items-center gap-3">
-            {session.status === 'pending' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-yellow-500 rounded-full"></span>
-                  <span className="text-yellow-400 text-sm font-medium">PENDING</span>
-                </div>
-                <button
-                  onClick={openSession}
-                  className="px-3 py-1 bg-green-600 hover:bg-green-700 text-white text-sm rounded transition-colors"
-                >
-                  Open Net
-                </button>
-              </>
-            )}
-            {session.status === 'active' && (
-              <>
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                  <span className="text-green-400 text-sm font-medium">ACTIVE</span>
-                </div>
-                <button
-                  onClick={closeSession}
-                  className="px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-sm rounded transition-colors"
-                >
-                  Close Net
-                </button>
-              </>
-            )}
-            {session.status === 'closed' && (
-              <span className="text-slate-400 text-sm font-medium">CLOSED</span>
-            )}
-          </div>
-          <div className="flex items-baseline gap-4 mt-2">
-            <div className="text-3xl font-mono">{formatDuration(elapsed)}</div>
-            <div className="text-sm font-mono text-slate-300">
-              <span>{currentTime.toLocaleTimeString()} Local</span>
-              <span className="mx-2">|</span>
-              <span>{currentTime.toISOString().slice(11, 19)}Z</span>
-            </div>
-          </div>
-          <IdentTimer isActive={session.status === 'active'} sessionId={session.id} />
-          <div className="text-xs text-slate-400">
-            Started: {new Date(session.dateTime).toLocaleString()}
-          </div>
+    <header className="shrink-0 border-b border-slate-700 bg-slate-800 px-3 py-1.5 text-white">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {/* Identity: truncates rather than wrapping, so the bar stays one line. */}
+        <h1 className="min-w-0 truncate text-base font-bold leading-tight" title={session.name}>
+          {session.name}
+        </h1>
+        <span className="hidden truncate text-xs text-slate-300 sm:inline">
+          {session.frequency && <span className="text-slate-200">{session.frequency}</span>}
+          {session.frequency && <span className="mx-1.5 text-slate-600">|</span>}
+          NCS {session.netControlOp}
+          {session.netControlName ? ` (${session.netControlName})` : ''}
+        </span>
+
+        {/* Status, clocks and net controls sit right-aligned on one line. */}
+        <div className="ml-auto flex items-center gap-2.5">
+          {session.status === 'pending' && (
+            <>
+              <span className="flex items-center gap-1.5 text-xs font-medium text-yellow-400">
+                <span className="h-2 w-2 rounded-full bg-yellow-500" />
+                PENDING
+              </span>
+              <button
+                onClick={openSession}
+                className="rounded bg-green-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-green-700"
+              >
+                Open Net
+              </button>
+            </>
+          )}
+          {session.status === 'active' && (
+            <>
+              <span className="flex items-center gap-1.5 text-xs font-medium text-green-400">
+                <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
+                ACTIVE
+              </span>
+              <IdentTimer isActive sessionId={session.id} />
+              <button
+                onClick={closeSession}
+                className="rounded bg-red-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-red-700"
+              >
+                Close Net
+              </button>
+            </>
+          )}
+          {session.status === 'closed' && (
+            <span className="text-xs font-medium text-slate-400">CLOSED</span>
+          )}
+          <span
+            className="log-data-face text-xl font-medium leading-none tabular-nums"
+            title={`Started ${new Date(session.dateTime).toLocaleString()}`}
+          >
+            {formatDuration(elapsed)}
+          </span>
+          {clock}
         </div>
       </div>
+      {error && (
+        <div className="mt-1 rounded border border-red-500/40 bg-red-950/40 px-2 py-1 text-xs text-red-200">
+          {error}
+        </div>
+      )}
     </header>
   );
 }

@@ -78,6 +78,7 @@ type StoredSession = NetSession & { preparedBy?: string };
 const normalizeSession = (session: StoredSession): NetSession => ({
   ...session,
   preparedBy: session.preparedBy ?? '',
+  requireAck: session.requireAck ?? false,
 });
 
 const normalizeParticipant = (participant: Participant): Participant => ({
@@ -87,7 +88,20 @@ const normalizeParticipant = (participant: Participant): Participant => ({
   location: participant.location ?? '',
   hasTraffic: participant.hasTraffic ?? false,
   trafficNote: participant.trafficNote ?? '',
+  // Rows flagged before trafficSince existed fall back to their check-in time,
+  // so an older session's queue keeps a stable order.
+  trafficSince: participant.hasTraffic
+    ? (participant.trafficSince ?? participant.checkInTime)
+    : undefined,
+  // Sessions stored before ACK mode existed have no pending stations.
+  acked: participant.acked ?? true,
+  // Unprovenanced values are the operator's: a callsign correction leaves them.
+  nameFromLookup: participant.nameFromLookup ?? false,
+  locationFromLookup: participant.locationFromLookup ?? false,
 });
+
+const nextCheckInNumber = (participants: Participant[]) =>
+  participants.reduce((max, participant) => Math.max(max, participant.checkInNumber), 0) + 1;
 
 const saveSessionData = (data: SessionData) => {
   const sessions = readSessions();
@@ -117,6 +131,43 @@ const writeCallsignCache = (cache: Record<string, CallsignCacheEntry>) => {
   writeJson(STORAGE_KEYS.callsignCache, cache);
 };
 
+/**
+ * In-progress form text. It lives in the store rather than in each form's local
+ * state so the desktop and mobile layouts share one draft: crossing the mobile
+ * breakpoint mid-entry swaps the layout, and half-typed text must survive that.
+ * Deliberately not persisted — a localStorage write per keystroke is not worth it.
+ */
+export type CheckInDraft = {
+  callsign: string;
+  tacticalCall: string;
+  name: string;
+  location: string;
+  hasTraffic: boolean;
+  note: string;
+  /** Same provenance rule as Participant, for the not-yet-checked-in station. */
+  nameFromLookup: boolean;
+  locationFromLookup: boolean;
+};
+
+export type LogDraft = {
+  fromCallsign: string;
+  toCallsign: string;
+  message: string;
+};
+
+const EMPTY_CHECK_IN_DRAFT: CheckInDraft = {
+  callsign: '',
+  tacticalCall: '',
+  name: '',
+  location: '',
+  hasTraffic: false,
+  note: '',
+  nameFromLookup: false,
+  locationFromLookup: false,
+};
+
+const EMPTY_LOG_DRAFT: LogDraft = { fromCallsign: '', toCallsign: 'NC', message: '' };
+
 interface NetStore {
   session: NetSession | null;
   participants: Participant[];
@@ -125,12 +176,28 @@ interface NetStore {
   isLoading: boolean;
   error: string | null;
   startTime: number | null;
+  checkInDraft: CheckInDraft;
+  logDraft: LogDraft;
+
+  // Draft actions
+  patchCheckInDraft: (patch: Partial<CheckInDraft>) => void;
+  /**
+   * Set the draft callsign, dropping any name/QTH the previous callsign's
+   * lookup supplied. Both check-in forms go through this so the rule lives in
+   * one place, and emptying those fields also re-arms the blur lookup, which
+   * only runs when they are blank.
+   */
+  setCheckInDraftCallsign: (callsign: string) => void;
+  clearCheckInDraft: () => void;
+  patchLogDraft: (patch: Partial<LogDraft>) => void;
+  clearLogDraft: () => void;
 
   // Session actions
   createSession: (session: Omit<NetSession, 'id' | 'status' | 'dateTime' | 'endTime'>) => void;
   openSession: () => void;
   closeSession: () => void;
   loadSession: (id: string) => Promise<void>;
+  setRequireAck: (value: boolean) => void;
 
   // Participant actions
   addParticipant: (
@@ -141,13 +208,33 @@ interface NetStore {
   ) => string;
   updateParticipant: (
     id: string,
-    updates: Partial<Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'>>
+    updates: Partial<Omit<Participant, 'id' | 'checkInTime' | 'checkInNumber'>>,
+    options?: {
+      /**
+       * This write is a registry lookup result, not the operator. It marks the
+       * fields it fills as lookup-owned, and never triggers a refresh of its
+       * own. Every other caller is treated as the operator typing.
+       */
+      fromLookup?: boolean;
+    }
   ) => void;
   getDisplayCallsign: (callsign: string) => string;
   removeParticipant: (id: string) => void;
+  ackParticipant: (id: string) => void;
+  ackAllPending: () => void;
 
   // Log entry actions
-  addLogEntry: (entry: Omit<LogEntry, 'id' | 'entryNumber' | 'time'>) => void;
+  addLogEntry: (
+    entry: Omit<LogEntry, 'id' | 'entryNumber' | 'time'>,
+    options?: {
+      /**
+       * Clear the pending-traffic flag of the sending station. Opt-in, because
+       * addParticipant logs its own "check in - traffic pending" entry and must
+       * not wipe the flag it just raised.
+       */
+      clearPendingTraffic?: boolean;
+    }
+  ) => void;
   setLastAcknowledgedEntry: (id: string) => void;
 
   // Callsign lookup
@@ -186,11 +273,42 @@ export const useNetStore = create<NetStore>((set, get) => ({
     }
     return null;
   })(),
+  checkInDraft: EMPTY_CHECK_IN_DRAFT,
+  logDraft: EMPTY_LOG_DRAFT,
+
+  patchCheckInDraft: (patch) => {
+    set({ checkInDraft: { ...get().checkInDraft, ...patch } });
+  },
+
+  setCheckInDraftCallsign: (callsign) => {
+    const draft = get().checkInDraft;
+    set({
+      checkInDraft: {
+        ...draft,
+        callsign,
+        name: draft.nameFromLookup ? '' : draft.name,
+        location: draft.locationFromLookup ? '' : draft.location,
+      },
+    });
+  },
+
+  clearCheckInDraft: () => {
+    set({ checkInDraft: EMPTY_CHECK_IN_DRAFT });
+  },
+
+  patchLogDraft: (patch) => {
+    set({ logDraft: { ...get().logDraft, ...patch } });
+  },
+
+  clearLogDraft: () => {
+    set({ logDraft: EMPTY_LOG_DRAFT });
+  },
 
   createSession: (sessionData) => {
     const session: NetSession = {
       id: uuidv4(),
       ...sessionData,
+      requireAck: sessionData.requireAck ?? false,
       dateTime: new Date().toISOString(),
       endTime: null,
       status: 'pending',
@@ -203,6 +321,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
       location: '',
       checkInTime: new Date().toISOString(),
       checkInNumber: 1,
+      acked: true,
     };
     set({
       session,
@@ -210,7 +329,10 @@ export const useNetStore = create<NetStore>((set, get) => ({
       logEntries: [],
       lastAcknowledgedEntryId: null,
       startTime: null,
-      error: null
+      error: null,
+      // Drafts belong to the net being run; never carry text into the next one.
+      checkInDraft: EMPTY_CHECK_IN_DRAFT,
+      logDraft: EMPTY_LOG_DRAFT,
     });
 
     saveSessionData({
@@ -261,8 +383,19 @@ export const useNetStore = create<NetStore>((set, get) => ({
       lastAcknowledgedEntryId: data.lastAcknowledgedEntryId ?? null,
       startTime: normalizedSession.status === 'active' ? new Date(normalizedSession.dateTime).getTime() : null,
       isLoading: false,
+      checkInDraft: EMPTY_CHECK_IN_DRAFT,
+      logDraft: EMPTY_LOG_DRAFT,
     });
     setActiveSessionId(normalizedSession.id);
+  },
+
+  setRequireAck: (value) => {
+    const { session, participants, logEntries, lastAcknowledgedEntryId } = get();
+    if (!session || session.requireAck === value) return;
+
+    const nextSession = { ...session, requireAck: value };
+    set({ session: nextSession });
+    saveSessionData({ session: nextSession, participants, logEntries, lastAcknowledgedEntryId });
   },
 
   addParticipant: (participantData) => {
@@ -274,9 +407,16 @@ export const useNetStore = create<NetStore>((set, get) => ({
       name: participantData.name,
       location: participantData.location,
       checkInTime: new Date().toISOString(),
-      checkInNumber: participants.length + 1,
+      // max + 1, not length + 1: removing a station must not reuse its number.
+      checkInNumber: nextCheckInNumber(participants),
       hasTraffic: participantData.hasTraffic ?? false,
       trafficNote: participantData.initialTraffic?.trim() ?? '',
+      trafficSince: participantData.hasTraffic ? new Date().toISOString() : undefined,
+      acked: !session?.requireAck,
+      // Carried over from the draft, so a name the lookup supplied there stays
+      // refreshable after check-in and one the operator typed stays theirs.
+      nameFromLookup: participantData.nameFromLookup ?? false,
+      locationFromLookup: participantData.locationFromLookup ?? false,
     };
     const newParticipants = [...participants, participant];
     set({ participants: newParticipants });
@@ -308,20 +448,66 @@ export const useNetStore = create<NetStore>((set, get) => ({
     return participant.id;
   },
 
-  updateParticipant: (id, updates) => {
+  updateParticipant: (id, updates, options) => {
     const { participants, session, logEntries, lastAcknowledgedEntryId } = get();
     const current = participants.find((p) => p.id === id);
     if (!current) return;
 
+    const wasFlagged = current.hasTraffic ?? false;
+    const isFlagged = updates.hasTraffic ?? wasFlagged;
+
+    const fromLookup = options?.fromLookup ?? false;
+    /*
+     * Provenance of name/QTH. A lookup marks what it fills as its own; the
+     * operator setting a field to a new value takes it over. Passing a field
+     * back unchanged (the Edit form submits all of them) leaves it as it was.
+     */
+    const ownership = (field: 'name' | 'location') => {
+      const key = field === 'name' ? 'nameFromLookup' : 'locationFromLookup';
+      const incoming = updates[field];
+      const held = current[key] ?? false;
+      if (incoming === undefined) return held;
+      if (fromLookup) return true;
+      return incoming.trim() === current[field] ? held : false;
+    };
+    const nameFromLookup = ownership('name');
+    const locationFromLookup = ownership('location');
+
+    // A corrected callsign invalidates whatever the old one's lookup filled in.
+    // Blank those fields now so a wrong name never outlives the correction, even
+    // by the length of a network round trip, and refill below if the registry
+    // knows the new call. Operator-typed values are left alone.
+    const callsignCorrection =
+      !fromLookup &&
+      typeof updates.callsign === 'string' &&
+      updates.callsign.trim().toUpperCase() !== current.callsign;
+    /*
+     * Only lookup-owned fields go stale, and `ownership` has already cleared the
+     * flag on anything the operator changed in this same write — so this needs
+     * no test for whether the update carried the field. That matters for the
+     * Edit form, which resubmits name and QTH untouched on every save.
+     */
+    const staleName = callsignCorrection && nameFromLookup;
+    const staleLocation = callsignCorrection && locationFromLookup;
+
     const nextParticipant: Participant = {
       ...current,
       ...updates,
+      nameFromLookup,
+      locationFromLookup,
       callsign: (updates.callsign ?? current.callsign).trim(),
       tacticalCall: (updates.tacticalCall ?? current.tacticalCall).trim(),
-      name: (updates.name ?? current.name).trim(),
-      location: (updates.location ?? current.location).trim(),
-      hasTraffic: updates.hasTraffic ?? current.hasTraffic ?? false,
+      name: staleName ? '' : (updates.name ?? current.name).trim(),
+      location: staleLocation ? '' : (updates.location ?? current.location).trim(),
+      hasTraffic: isFlagged,
       trafficNote: (updates.trafficNote ?? current.trafficNote ?? '').trim(),
+      // Stamp when traffic is raised and hold that time while it stays raised,
+      // so editing a station's name does not send it to the back of the queue.
+      trafficSince: isFlagged
+        ? wasFlagged
+          ? (current.trafficSince ?? new Date().toISOString())
+          : new Date().toISOString()
+        : undefined,
     };
 
     const updatedParticipants = participants.map((p) => (p.id === id ? nextParticipant : p));
@@ -358,6 +544,30 @@ export const useNetStore = create<NetStore>((set, get) => ({
         lastAcknowledgedEntryId,
       });
     }
+
+    // Refill what the correction just blanked, from the new callsign's entry.
+    if (callsignCorrection && (staleName || staleLocation)) {
+      const corrected = nextParticipant.callsign;
+      get()
+        .lookupCallsign(corrected)
+        .then((result) => {
+          if (!result) return;
+          // The operator may have corrected the call again, typed the fields in
+          // by hand, or removed the station while this was in flight; a stale
+          // answer must not overwrite any of that.
+          const latest = get().participants.find((p) => p.id === id);
+          if (!latest || latest.callsign !== corrected) return;
+          const refill: Partial<Participant> = {};
+          if (staleName && !latest.name && result.name) refill.name = result.name;
+          if (staleLocation && !latest.location) {
+            const place = [result.city, result.state].filter(Boolean).join(', ').trim();
+            if (place) refill.location = place;
+          }
+          if (Object.keys(refill).length > 0) {
+            get().updateParticipant(id, refill, { fromLookup: true });
+          }
+        });
+    }
   },
 
   removeParticipant: (id) => {
@@ -366,6 +576,42 @@ export const useNetStore = create<NetStore>((set, get) => ({
     set({ participants: newParticipants });
     if (session) {
       saveSessionData({ session, participants: newParticipants, logEntries, lastAcknowledgedEntryId });
+    }
+  },
+
+  ackParticipant: (id) => {
+    const { participants, session, logEntries, lastAcknowledgedEntryId } = get();
+    const target = participants.find((p) => p.id === id);
+    if (!target || target.acked) return;
+
+    const updatedParticipants = participants.map((p) =>
+      p.id === id ? { ...p, acked: true } : p
+    );
+    set({ participants: updatedParticipants });
+    if (session) {
+      saveSessionData({
+        session,
+        participants: updatedParticipants,
+        logEntries,
+        lastAcknowledgedEntryId,
+      });
+    }
+  },
+
+  ackAllPending: () => {
+    const { participants, session, logEntries, lastAcknowledgedEntryId } = get();
+    if (!participants.some((p) => !p.acked)) return;
+
+    // One state update and one write for the whole batch, however many are waiting.
+    const updatedParticipants = participants.map((p) => (p.acked ? p : { ...p, acked: true }));
+    set({ participants: updatedParticipants });
+    if (session) {
+      saveSessionData({
+        session,
+        participants: updatedParticipants,
+        logEntries,
+        lastAcknowledgedEntryId,
+      });
     }
   },
 
@@ -378,8 +624,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
     return callsign;
   },
 
-  addLogEntry: (entryData) => {
-    const { logEntries, session } = get();
+  addLogEntry: (entryData, options) => {
+    const { logEntries, session, participants, lastAcknowledgedEntryId } = get();
     const entry: LogEntry = {
       id: uuidv4(),
       ...entryData,
@@ -387,14 +633,31 @@ export const useNetStore = create<NetStore>((set, get) => ({
       entryNumber: logEntries.length + 1,
     };
     const newEntries = [...logEntries, entry];
-    set({ logEntries: newEntries });
+
+    // Logging traffic from a station is the act of clearing it, so the operator
+    // does not have to remember to untick the box afterwards.
+    let nextParticipants = participants;
+    if (options?.clearPendingTraffic) {
+      const sender = entry.fromCallsign.trim().toUpperCase();
+      if (sender) {
+        nextParticipants = participants.map((p) => {
+          if (!p.hasTraffic) return p;
+          const matches =
+            p.callsign.toUpperCase() === sender ||
+            (p.tacticalCall ? p.tacticalCall.toUpperCase() === sender : false);
+          return matches ? { ...p, hasTraffic: false, trafficNote: '', trafficSince: undefined } : p;
+        });
+      }
+    }
+
+    set({ logEntries: newEntries, participants: nextParticipants });
 
     if (session) {
       saveSessionData({
         session,
-        participants: get().participants,
+        participants: nextParticipants,
         logEntries: newEntries,
-        lastAcknowledgedEntryId: get().lastAcknowledgedEntryId,
+        lastAcknowledgedEntryId,
       });
     }
   },
@@ -425,14 +688,24 @@ export const useNetStore = create<NetStore>((set, get) => ({
       const cs = data?.hamdb?.callsign;
       if (!cs) return null;
 
-      const nameParts = [cs.fname, cs.name].filter(Boolean).join(' ');
+      /*
+       * An unknown callsign is not an error to hamdb: it answers 200 with every
+       * field set to the string NOT_FOUND. Taken at face value that lands a
+       * station named "NOT_FOUND NOT_FOUND" in the log, so treat it as a miss
+       * and drop any field carrying the sentinel.
+       */
+      const real = (value: unknown) =>
+        typeof value === 'string' && value !== 'NOT_FOUND' ? value : '';
+      if (real(cs.call) === '' || data?.hamdb?.messages?.status === 'NOT_FOUND') return null;
+
+      const nameParts = [real(cs.fname), real(cs.name)].filter(Boolean).join(' ');
       const result: CallsignLookupResult = {
-        callsign: cs.call || normalized,
+        callsign: real(cs.call) || normalized,
         name: nameParts,
-        city: cs.addr2 || '',
-        state: cs.state || '',
-        country: cs.country || 'USA',
-        grid: cs.grid || '',
+        city: real(cs.addr2),
+        state: real(cs.state),
+        country: real(cs.country) || 'USA',
+        grid: real(cs.grid),
       };
 
       cache[normalized] = { result, cachedAt: Date.now() };
@@ -563,13 +836,10 @@ export const useNetStore = create<NetStore>((set, get) => ({
           name: netControlName,
           location: '',
           checkInTime: dateTime,
-          checkInNumber:
-            normalizedParticipants.reduce(
-              (max, participant) => Math.max(max, participant.checkInNumber),
-              0
-            ) + 1,
+          checkInNumber: nextCheckInNumber(normalizedParticipants),
           hasTraffic: false,
           trafficNote: '',
+          acked: true,
         });
       }
 
@@ -580,6 +850,7 @@ export const useNetStore = create<NetStore>((set, get) => ({
         netControlOp,
         netControlName,
         preparedBy,
+        requireAck: false,
         dateTime,
         endTime: null,
         status: 'active',
@@ -594,6 +865,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
         startTime: Number.isNaN(startTimeValue) ? null : startTimeValue,
         isLoading: false,
         error: null,
+        checkInDraft: EMPTY_CHECK_IN_DRAFT,
+        logDraft: EMPTY_LOG_DRAFT,
       });
 
       saveSessionData({
@@ -792,6 +1065,8 @@ export const useNetStore = create<NetStore>((set, get) => ({
       isLoading: false,
       error: null,
       startTime: null,
+      checkInDraft: EMPTY_CHECK_IN_DRAFT,
+      logDraft: EMPTY_LOG_DRAFT,
     });
   },
 }));
